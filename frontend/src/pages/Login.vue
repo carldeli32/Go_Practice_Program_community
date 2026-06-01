@@ -16,6 +16,26 @@
           <el-input v-model="form.email" placeholder="邮箱（选填）" size="large" clearable />
         </el-form-item>
 
+        <!-- 注册时填写更多个人信息 -->
+        <template v-if="isRegister">
+          <el-form-item>
+            <el-select v-model="form.gender" placeholder="性别（选填）" size="large" style="width:100%" clearable>
+              <el-option label="男" value="男" />
+              <el-option label="女" value="女" />
+              <el-option label="其他" value="其他" />
+            </el-select>
+          </el-form-item>
+          <el-form-item>
+            <el-input-number v-model="form.age" :min="1" :max="150" placeholder="年龄（选填）" size="large" style="width:100%" controls-position="right" />
+          </el-form-item>
+          <el-form-item>
+            <el-input v-model="form.job" placeholder="当前工作（选填）" size="large" clearable />
+          </el-form-item>
+          <el-form-item>
+            <el-input v-model="form.motto" placeholder="座右铭（选填）" size="large" maxlength="200" show-word-limit clearable />
+          </el-form-item>
+        </template>
+
         <el-form-item>
           <el-button type="primary" size="large" style="width:100%" :loading="loading" @click="handleSubmit">
             {{ isRegister ? '注册' : '登录' }}
@@ -44,7 +64,15 @@ const router = useRouter()
 const isRegister = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
-const form = reactive({ username: '', password: '', email: '' })
+const form = reactive({
+  username: '',
+  password: '',
+  email: '',
+  gender: '',
+  age: null,
+  job: '',
+  motto: '',
+})
 
 async function handleSubmit() {
   if (!form.username || !form.password) {
@@ -79,9 +107,9 @@ async function handleSubmit() {
 .login-page {
   display: flex;
   justify-content: center;
-  padding-top: 60px;
+  padding-top: 40px;
 }
 .login-card {
-  width: 400px;
+  width: 440px;
 }
 </style>

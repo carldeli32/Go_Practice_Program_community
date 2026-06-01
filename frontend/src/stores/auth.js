@@ -1,6 +1,6 @@
 import { reactive } from 'vue'
 
-// 简单的全局认证状态（不依赖 Pinia，足够这个项目使用）
+// 简单的全局认证状态
 const state = reactive({
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   token: localStorage.getItem('token') || '',

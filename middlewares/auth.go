@@ -5,6 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"community/config"
+	"community/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -66,7 +69,22 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 4. 把用户信息存入上下文，后续 handler 可以取出来用
+		// 4. 检查用户是否仍然存在
+		var user models.User
+		if err := config.DB.First(&user, claims.UserID).Error; err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在，请重新登录"})
+			c.Abort()
+			return
+		}
+
+		// 5. 检查是否被封禁
+		if user.IsBanned {
+			c.JSON(http.StatusForbidden, gin.H{"error": "账号已被封禁"})
+			c.Abort()
+			return
+		}
+
+		// 6. 把用户信息存入上下文
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Next()

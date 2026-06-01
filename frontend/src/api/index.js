@@ -21,6 +21,16 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // 登录和注册接口的 401 不做跳转，让页面自己显示错误
+    const url = error.config?.url || ''
+    const isAuthPage = url.includes('/login') || url.includes('/register')
+
+    if (error.response?.status === 401 && !isAuthPage) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/login'
+      return Promise.reject(new Error('登录已过期，请重新登录'))
+    }
     const msg = error.response?.data?.error || '网络错误'
     return Promise.reject(new Error(msg))
   }
