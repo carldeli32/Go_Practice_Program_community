@@ -32,7 +32,7 @@ func AdminListUsers(c *gin.Context) {
 	for i, u := range users {
 		items[i] = userItem{u.ID, u.Username, u.IsAdmin, u.IsBanned, u.Motto}
 	}
-	c.JSON(http.StatusOK, gin.H{"users": items, "total": len(items)})
+	models.Success(c, "获取成功", gin.H{"users": items, "total": len(items)})
 }
 
 // ========== 管理员创建用户 ==========
@@ -43,13 +43,13 @@ func AdminCreateUser(c *gin.Context) {
 		Password string `json:"password" binding:"required,min=6"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	var exist models.User
 	if err := config.DB.Where("username = ?", req.Username).First(&exist).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "用户名已存在"})
+		models.Error(c, http.StatusConflict, "用户名已存在")
 		return
 	}
 
@@ -57,32 +57,33 @@ func AdminCreateUser(c *gin.Context) {
 	user := models.User{Username: req.Username, Password: string(hashed)}
 	config.DB.Create(&user)
 
-	c.JSON(http.StatusOK, gin.H{"message": "用户已创建", "user": gin.H{"id": user.ID, "username": user.Username}})
+	models.Success(c, "用户已创建", gin.H{"id": user.ID, "username": user.Username})
 }
+
 func BanUser(c *gin.Context) {
 	uid, _ := strconv.Atoi(c.Param("id"))
 	var user models.User
 	if err := config.DB.First(&user, uid).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		models.Error(c, http.StatusNotFound, "用户不存在")
 		return
 	}
 	if user.IsAdmin {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能封禁管理员"})
+		models.Error(c, http.StatusBadRequest, "不能封禁管理员")
 		return
 	}
 	config.DB.Model(&user).Update("is_banned", true)
-	c.JSON(http.StatusOK, gin.H{"message": "已封禁 " + user.Username})
+	models.Success(c, "已封禁 "+user.Username, nil)
 }
 
 func UnbanUser(c *gin.Context) {
 	uid, _ := strconv.Atoi(c.Param("id"))
 	var user models.User
 	if err := config.DB.First(&user, uid).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		models.Error(c, http.StatusNotFound, "用户不存在")
 		return
 	}
 	config.DB.Model(&user).Update("is_banned", false)
-	c.JSON(http.StatusOK, gin.H{"message": "已解封 " + user.Username})
+	models.Success(c, "已解封 "+user.Username, nil)
 }
 
 // ========== 公告 ==========
@@ -91,24 +92,24 @@ func SetAnnouncement(c *gin.Context) {
 		Content string `json:"content" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "内容不能为空"})
+		models.Error(c, http.StatusBadRequest, "内容不能为空")
 		return
 	}
 	config.DB.Where("1 = 1").Delete(&models.Announcement{})
 	config.DB.Create(&models.Announcement{Content: req.Content})
-	c.JSON(http.StatusOK, gin.H{"message": "公告已发布 📢"})
+	models.Success(c, "公告已发布 📢", nil)
 }
 
 func DeleteAnnouncement(c *gin.Context) {
 	config.DB.Where("1 = 1").Delete(&models.Announcement{})
-	c.JSON(http.StatusOK, gin.H{"message": "公告已删除"})
+	models.Success(c, "公告已删除", nil)
 }
 
 func GetAnnouncement(c *gin.Context) {
 	var announcement models.Announcement
 	if err := config.DB.First(&announcement).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{"content": ""})
+		models.Success(c, "获取成功", gin.H{"content": ""})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"content": announcement.Content})
+	models.Success(c, "获取成功", gin.H{"content": announcement.Content})
 }

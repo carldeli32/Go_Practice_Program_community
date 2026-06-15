@@ -15,7 +15,7 @@ func AdminRequired() gin.HandlerFunc {
 		userID := c.GetUint("user_id")
 		var user models.User
 		if err := config.DB.First(&user, userID).Error; err != nil || !user.IsAdmin {
-			c.JSON(http.StatusForbidden, gin.H{"error": "需要管理员权限"})
+			models.Error(c, http.StatusForbidden, "需要管理员权限")
 			c.Abort()
 			return
 		}

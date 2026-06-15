@@ -26,18 +26,18 @@ func CreatePost(c *gin.Context) {
 		Content string `json:"content" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		models.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
 
 	userID := c.GetUint("user_id")
 	post := models.Post{Title: req.Title, Content: req.Content, UserID: userID}
 	if err := config.DB.Create(&post).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "发帖失败"})
+		models.Error(c, http.StatusInternalServerError, "发帖失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "发帖成功 ✍️", "post": post})
+	models.Success(c, "发帖成功 ✍️", gin.H{"post": post})
 }
 
 // ========== 帖子列表 ==========
@@ -57,7 +57,7 @@ func GetPosts(c *gin.Context) {
 	config.DB.Model(&models.Post{}).Count(&total)
 	config.DB.Preload("User").Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&posts)
 
-	c.JSON(http.StatusOK, gin.H{"posts": posts, "total": total, "page": page, "page_size": pageSize})
+	models.Success(c, "获取成功", gin.H{"posts": posts, "total": total, "page": page, "page_size": pageSize})
 }
 
 // ========== 帖子详情 ==========
@@ -65,10 +65,10 @@ func GetPost(c *gin.Context) {
 	id := c.Param("id")
 	var post models.Post
 	if err := config.DB.Preload("User").First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"post": post})
+	models.Success(c, "获取成功", gin.H{"post": post})
 }
 
 // ========== 更新帖子（作者或管理员）==========
@@ -78,11 +78,11 @@ func UpdatePost(c *gin.Context) {
 
 	var post models.Post
 	if err := config.DB.First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
 	if post.UserID != userID && !isAdminUser(userID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "只能编辑自己的帖子"})
+		models.Error(c, http.StatusForbidden, "只能编辑自己的帖子")
 		return
 	}
 
@@ -91,7 +91,7 @@ func UpdatePost(c *gin.Context) {
 		Content string `json:"content"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
@@ -103,12 +103,12 @@ func UpdatePost(c *gin.Context) {
 		updates["content"] = req.Content
 	}
 	if len(updates) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "没有要更新的内容"})
+		models.Error(c, http.StatusBadRequest, "没有要更新的内容")
 		return
 	}
 
 	config.DB.Model(&post).Updates(updates)
-	c.JSON(http.StatusOK, gin.H{"message": "更新成功", "post": post})
+	models.Success(c, "更新成功", gin.H{"post": post})
 }
 
 // ========== 删除帖子（作者或管理员）==========
@@ -118,15 +118,15 @@ func DeletePost(c *gin.Context) {
 
 	var post models.Post
 	if err := config.DB.First(&post, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
 	if post.UserID != userID && !isAdminUser(userID) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "只能删除自己的帖子"})
+		models.Error(c, http.StatusForbidden, "只能删除自己的帖子")
 		return
 	}
 
 	config.DB.Where("post_id = ?", post.ID).Delete(&models.Comment{})
 	config.DB.Delete(&post)
-	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
+	models.Success(c, "删除成功", nil)
 }

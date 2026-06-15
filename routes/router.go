@@ -3,12 +3,13 @@ package routes
 import (
 	"community/controllers"
 	"community/middlewares"
+	"community/models"
 
 	"github.com/gin-gonic/gin"
 )
 
 func Setup(r *gin.Engine) {
-	r.GET("/ping", func(c *gin.Context) { c.JSON(200, gin.H{"message": "pong"}) })
+	r.GET("/ping", func(c *gin.Context) { models.Success(c, "pong", nil) })
 
 	api := r.Group("/api")
 	{

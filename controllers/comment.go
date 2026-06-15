@@ -17,7 +17,7 @@ func CreateComment(c *gin.Context) {
 	postID := c.Param("id")
 	var post models.Post
 	if err := config.DB.First(&post, postID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "帖子不存在"})
+		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
 
@@ -25,19 +25,19 @@ func CreateComment(c *gin.Context) {
 		Content string `json:"content" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	userID := c.GetUint("user_id")
 	comment := models.Comment{Content: req.Content, UserID: userID, PostID: post.ID}
 	if err := config.DB.Create(&comment).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "评论失败"})
+		models.Error(c, http.StatusInternalServerError, "评论失败")
 		return
 	}
 	config.DB.Preload("User").First(&comment, comment.ID)
 
-	c.JSON(http.StatusOK, gin.H{"message": "评论成功 💬", "comment": comment})
+	models.Success(c, "评论成功 💬", gin.H{"comment": comment})
 }
 
 // ========== 获取评论列表（公开，但解析 token 以确定权限）==========
@@ -82,7 +82,7 @@ func GetComments(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"comments": items, "total": len(items)})
+	models.Success(c, "获取成功", gin.H{"comments": items, "total": len(items)})
 }
 
 // ========== 编辑评论（作者本人或管理员）==========
@@ -92,7 +92,7 @@ func UpdateComment(c *gin.Context) {
 
 	var comment models.Comment
 	if err := config.DB.First(&comment, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		models.Error(c, http.StatusNotFound, "评论不存在")
 		return
 	}
 
@@ -100,7 +100,7 @@ func UpdateComment(c *gin.Context) {
 	var user models.User
 	config.DB.First(&user, userID)
 	if comment.UserID != userID && !user.IsAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
+		models.Error(c, http.StatusForbidden, "无权操作")
 		return
 	}
 
@@ -108,13 +108,13 @@ func UpdateComment(c *gin.Context) {
 		Content string `json:"content" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	config.DB.Model(&comment).Update("content", req.Content)
 	config.DB.Preload("User").First(&comment, id)
-	c.JSON(http.StatusOK, gin.H{"message": "已更新", "comment": comment})
+	models.Success(c, "已更新", gin.H{"comment": comment})
 }
 
 // ========== 删除评论（作者本人或管理员）==========
@@ -124,17 +124,17 @@ func DeleteComment(c *gin.Context) {
 
 	var comment models.Comment
 	if err := config.DB.First(&comment, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "评论不存在"})
+		models.Error(c, http.StatusNotFound, "评论不存在")
 		return
 	}
 
 	var user models.User
 	config.DB.First(&user, userID)
 	if comment.UserID != userID && !user.IsAdmin {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
+		models.Error(c, http.StatusForbidden, "无权操作")
 		return
 	}
 
 	config.DB.Delete(&comment)
-	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+	models.Success(c, "已删除", nil)
 }

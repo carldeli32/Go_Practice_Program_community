@@ -17,38 +17,38 @@ func FollowUser(c *gin.Context) {
 		UserID uint `json:"user_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	myID := c.GetUint("user_id")
 
 	if myID == req.UserID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能关注自己"})
+		models.Error(c, http.StatusBadRequest, "不能关注自己")
 		return
 	}
 
 	// 检查对方是否存在
 	var target models.User
 	if err := config.DB.First(&target, req.UserID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		models.Error(c, http.StatusNotFound, "用户不存在")
 		return
 	}
 
 	// 检查是否已关注
 	var exist models.Follow
 	if err := config.DB.Where("follower_id = ? AND followee_id = ?", myID, req.UserID).First(&exist).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "已关注该用户"})
+		models.Error(c, http.StatusConflict, "已关注该用户")
 		return
 	}
 
 	follow := models.Follow{FollowerID: myID, FolloweeID: req.UserID}
 	if err := config.DB.Create(&follow).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "关注失败"})
+		models.Error(c, http.StatusInternalServerError, "关注失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "关注成功 🤝"})
+	models.Success(c, "关注成功 🤝", nil)
 }
 
 // ========== 取消关注 ==========
@@ -59,11 +59,11 @@ func UnfollowUser(c *gin.Context) {
 
 	result := config.DB.Where("follower_id = ? AND followee_id = ?", myID, targetID).Delete(&models.Follow{})
 	if result.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "未关注该用户"})
+		models.Error(c, http.StatusNotFound, "未关注该用户")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "已取消关注"})
+	models.Success(c, "已取消关注", nil)
 }
 
 // ========== 我关注的人 ==========
@@ -81,14 +81,14 @@ func GetMyFollowing(c *gin.Context) {
 	users := make([]gin.H, len(follows))
 	for i, f := range follows {
 		users[i] = gin.H{
-			"id":         f.FolloweeID,
-			"username":   f.Followee.Username,
-			"motto":      f.Followee.Motto,
+			"id":          f.FolloweeID,
+			"username":    f.Followee.Username,
+			"motto":       f.Followee.Motto,
 			"followed_at": f.CreatedAt,
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": users, "total": len(users)})
+	models.Success(c, "获取成功", gin.H{"users": users, "total": len(users)})
 }
 
 // ========== 关注我的人（粉丝）==========
@@ -105,12 +105,12 @@ func GetMyFollowers(c *gin.Context) {
 	users := make([]gin.H, len(follows))
 	for i, f := range follows {
 		users[i] = gin.H{
-			"id":           f.FollowerID,
-			"username":     f.Follower.Username,
-			"motto":        f.Follower.Motto,
-			"followed_at":  f.CreatedAt,
+			"id":          f.FollowerID,
+			"username":    f.Follower.Username,
+			"motto":       f.Follower.Motto,
+			"followed_at": f.CreatedAt,
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": users, "total": len(users)})
+	models.Success(c, "获取成功", gin.H{"users": users, "total": len(users)})
 }

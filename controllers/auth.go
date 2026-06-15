@@ -25,21 +25,21 @@ func Register(c *gin.Context) {
 		Motto    string `json:"motto"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
+		models.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
 
 	// 查重
 	var exist models.User
 	if err := config.DB.Where("username = ?", req.Username).First(&exist).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "用户名已被注册"})
+		models.Error(c, http.StatusConflict, "用户名已被注册")
 		return
 	}
 
 	// bcrypt 加密
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "密码加密失败"})
+		models.Error(c, http.StatusInternalServerError, "密码加密失败")
 		return
 	}
 
@@ -53,21 +53,18 @@ func Register(c *gin.Context) {
 		Motto:    req.Motto,
 	}
 	if err := config.DB.Create(&user).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "注册失败"})
+		models.Error(c, http.StatusInternalServerError, "注册失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "注册成功 🎉",
-		"user": gin.H{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
-			"gender":   user.Gender,
-			"age":      user.Age,
-			"job":      user.Job,
-			"motto":    user.Motto,
-		},
+	models.Success(c, "注册成功 🎉", gin.H{
+		"id":       user.ID,
+		"username": user.Username,
+		"email":    user.Email,
+		"gender":   user.Gender,
+		"age":      user.Age,
+		"job":      user.Job,
+		"motto":    user.Motto,
 	})
 }
 
@@ -79,35 +76,34 @@ func Login(c *gin.Context) {
 		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	var user models.User
 	if err := config.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		models.Error(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
+		models.Error(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
 
 	if user.IsBanned {
-		c.JSON(http.StatusForbidden, gin.H{"error": "账号已被封禁，请联系管理员"})
+		models.Error(c, http.StatusForbidden, "账号已被封禁，请联系管理员")
 		return
 	}
 
 	token, err := middlewares.GenerateToken(user.ID, user.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Token 生成失败"})
+		models.Error(c, http.StatusInternalServerError, "Token 生成失败")
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "登录成功 👋",
-		"token":   token,
+	models.Success(c, "登录成功 👋", gin.H{
+		"token": token,
 		"user": gin.H{
 			"id":       user.ID,
 			"username": user.Username,
@@ -128,13 +124,13 @@ func GetUserProfile(c *gin.Context) {
 
 	uid, err := strconv.Atoi(id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的用户 ID"})
+		models.Error(c, http.StatusBadRequest, "无效的用户 ID")
 		return
 	}
 
 	var user models.User
 	if err := config.DB.First(&user, uid).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		models.Error(c, http.StatusNotFound, "用户不存在")
 		return
 	}
 
@@ -160,7 +156,7 @@ func GetUserProfile(c *gin.Context) {
 
 	level := user.Level(config.DB)
 
-	c.JSON(http.StatusOK, gin.H{
+	models.Success(c, "获取成功", gin.H{
 		"user": gin.H{
 			"id":              user.ID,
 			"username":        user.Username,

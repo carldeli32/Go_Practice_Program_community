@@ -43,7 +43,7 @@ func AuthRequired() gin.HandlerFunc {
 		// 1. 从 Header 取 Token
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "请先登录"})
+			models.Error(c, http.StatusUnauthorized, "请先登录")
 			c.Abort()
 			return
 		}
@@ -51,7 +51,7 @@ func AuthRequired() gin.HandlerFunc {
 		// 2. 格式校验：必须是 "Bearer <token>"
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 格式错误"})
+			models.Error(c, http.StatusUnauthorized, "Token 格式错误")
 			c.Abort()
 			return
 		}
@@ -64,7 +64,7 @@ func AuthRequired() gin.HandlerFunc {
 		})
 
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token 无效或已过期"})
+			models.Error(c, http.StatusUnauthorized, "Token 无效或已过期")
 			c.Abort()
 			return
 		}
@@ -72,14 +72,14 @@ func AuthRequired() gin.HandlerFunc {
 		// 4. 检查用户是否仍然存在
 		var user models.User
 		if err := config.DB.First(&user, claims.UserID).Error; err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "用户不存在，请重新登录"})
+			models.Error(c, http.StatusUnauthorized, "用户不存在，请重新登录")
 			c.Abort()
 			return
 		}
 
 		// 5. 检查是否被封禁
 		if user.IsBanned {
-			c.JSON(http.StatusForbidden, gin.H{"error": "账号已被封禁"})
+			models.Error(c, http.StatusForbidden, "账号已被封禁")
 			c.Abort()
 			return
 		}

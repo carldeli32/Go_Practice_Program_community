@@ -19,12 +19,12 @@ func CreateThread(c *gin.Context) {
 		Title      string `json:"title" binding:"required,min=1,max=100"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 	myID := c.GetUint("user_id")
 	if myID == req.WithUserID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能和自己对话"})
+		models.Error(c, http.StatusBadRequest, "不能和自己对话")
 		return
 	}
 
@@ -36,10 +36,10 @@ func CreateThread(c *gin.Context) {
 
 	thread := models.Thread{Title: req.Title, UserAID: a, UserBID: b}
 	if err := config.DB.Create(&thread).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建失败"})
+		models.Error(c, http.StatusInternalServerError, "创建失败")
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "主题已创建 📌", "thread": thread})
+	models.Success(c, "主题已创建 📌", gin.H{"thread": thread})
 }
 
 // ========== 获取与某人的所有主题 ==========
@@ -66,7 +66,7 @@ func GetThreads(c *gin.Context) {
 		items[i] = threadItem{Thread: t, MessageCount: count}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"threads": items})
+	models.Success(c, "获取成功", gin.H{"threads": items})
 }
 
 // ========== 删除主题 ==========
@@ -77,17 +77,17 @@ func DeleteThread(c *gin.Context) {
 
 	var thread models.Thread
 	if err := config.DB.First(&thread, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "主题不存在"})
+		models.Error(c, http.StatusNotFound, "主题不存在")
 		return
 	}
 	if thread.UserAID != myID && thread.UserBID != myID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权操作"})
+		models.Error(c, http.StatusForbidden, "无权操作")
 		return
 	}
 
 	config.DB.Where("thread_id = ?", thread.ID).Delete(&models.Message{})
 	config.DB.Delete(&thread)
-	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+	models.Success(c, "已删除", nil)
 }
 
 // ========== 发送私信（指定主题）==========
@@ -100,19 +100,19 @@ func SendMessage(c *gin.Context) {
 		Content  string `json:"content" binding:"required,min=1"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
 	fromUserID := c.GetUint("user_id")
 	if fromUserID == req.ToUserID {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "不能给自己发私信"})
+		models.Error(c, http.StatusBadRequest, "不能给自己发私信")
 		return
 	}
 
 	var toUser models.User
 	if err := config.DB.First(&toUser, req.ToUserID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "用户不存在"})
+		models.Error(c, http.StatusNotFound, "用户不存在")
 		return
 	}
 
@@ -123,11 +123,11 @@ func SendMessage(c *gin.Context) {
 		Content:    req.Content,
 	}
 	if err := config.DB.Create(&msg).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "发送失败"})
+		models.Error(c, http.StatusInternalServerError, "发送失败")
 		return
 	}
 	config.DB.Preload("FromUser").Preload("ToUser").First(&msg, msg.ID)
-	c.JSON(http.StatusOK, gin.H{"message": "发送成功 ✉️", "data": msg})
+	models.Success(c, "发送成功 ✉️", gin.H{"message": msg})
 }
 
 // ========== 会话列表（按主题分组）==========
@@ -173,7 +173,7 @@ func GetConversations(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"conversations": conversations})
+	models.Success(c, "获取成功", gin.H{"conversations": conversations})
 }
 
 // ========== 与某人的某主题对话详情 ==========
@@ -196,7 +196,7 @@ func GetConversation(c *gin.Context) {
 	var partner models.User
 	config.DB.First(&partner, partnerID)
 
-	c.JSON(http.StatusOK, gin.H{
+	models.Success(c, "获取成功", gin.H{
 		"partner":  gin.H{"id": partner.ID, "username": partner.Username},
 		"messages": messages,
 	})
@@ -206,13 +206,13 @@ func GetUnreadCount(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	var count int64
 	config.DB.Model(&models.Message{}).Where("to_user_id = ? AND is_read = false", userID).Count(&count)
-	c.JSON(http.StatusOK, gin.H{"count": count})
+	models.Success(c, "获取成功", gin.H{"count": count})
 }
 
 func MarkAllRead(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	config.DB.Model(&models.Message{}).Where("to_user_id = ? AND is_read = false", userID).Update("is_read", true)
-	c.JSON(http.StatusOK, gin.H{"message": "ok"})
+	models.Success(c, "已标记", nil)
 }
 
 func MarkMessagesRead(c *gin.Context) {
@@ -221,5 +221,5 @@ func MarkMessagesRead(c *gin.Context) {
 	config.DB.Model(&models.Message{}).
 		Where("from_user_id = ? AND to_user_id = ? AND is_read = false", partnerID, userID).
 		Update("is_read", true)
-	c.JSON(http.StatusOK, gin.H{"message": "ok"})
+	models.Success(c, "已标记", nil)
 }
