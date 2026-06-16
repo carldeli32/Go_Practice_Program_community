@@ -4,18 +4,19 @@ import (
 	"net/http"
 	"strconv"
 
-	"community/config"
+	"community/data"
 	"community/models"
+	"community/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ========== 创建帖子 ==========
+// ─── 创建帖子 ───
 func CreatePost(c *gin.Context) {
 	var req struct {
 		Title      string `json:"title" binding:"required,min=1,max=200"`
 		Content    string `json:"content" binding:"required,min=1"`
-		CategoryID *uint  `json:"category_id"` // nil 时默认综合讨论(1)
+		CategoryID *uint  `json:"category_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		models.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
@@ -28,23 +29,17 @@ func CreatePost(c *gin.Context) {
 	}
 
 	userID := c.GetUint("user_id")
-	post := models.Post{Title: req.Title, Content: req.Content, UserID: userID, CategoryID: categoryID}
-
-	// 禁言检查
-	if muted, msg := checkMuted(c, post); muted {
-		models.Error(c, http.StatusForbidden, msg)
-		return
-	}
-
-	if err := config.DB.Create(&post).Error; err != nil {
-		models.Error(c, http.StatusInternalServerError, "发帖失败")
+	post, err := service.CreatePost(userID, req.Title, req.Content, categoryID)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
 	models.Success(c, "发帖成功 ✍️", gin.H{"post": post})
 }
 
-// ========== 帖子列表 ==========
+// ─── 帖子列表 ───
 func GetPosts(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
@@ -54,50 +49,39 @@ func GetPosts(c *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
-	categoryIDStr := c.DefaultQuery("category_id", "")
-	q := c.DefaultQuery("q", "")
-	offset := (page - 1) * pageSize
 
-	var posts []models.Post
-	var total int64
-
-	baseQuery := config.DB.Model(&models.Post{})
-	if categoryIDStr != "" {
-		baseQuery = baseQuery.Where("category_id = ?", categoryIDStr)
+	posts, total, err := data.ListPosts(page, pageSize,
+		c.DefaultQuery("category_id", ""),
+		c.DefaultQuery("q", ""))
+	if err != nil {
+		models.Error(c, http.StatusInternalServerError, "查询失败")
+		return
 	}
-	if q != "" {
-		baseQuery = baseQuery.Where("title LIKE ?", "%"+q+"%")
-	}
-	baseQuery.Count(&total)
-	baseQuery.Preload("User").Preload("Category").Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&posts)
 
-	models.Success(c, "获取成功", gin.H{"posts": posts, "total": total, "page": page, "page_size": pageSize})
+	models.Success(c, "获取成功", gin.H{
+		"posts":     posts,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
 }
 
-// ========== 帖子详情 ==========
+// ─── 帖子详情 ───
 func GetPost(c *gin.Context) {
-	id := c.Param("id")
-	var post models.Post
-	if err := config.DB.Preload("User").Preload("Category").First(&post, id).Error; err != nil {
+	pid := c.Param("id")
+	post, err := data.FindPostByID(strToUint(pid))
+	if err != nil {
 		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
 	models.Success(c, "获取成功", gin.H{"post": post})
 }
 
-// ========== 更新帖子 ==========
+// ─── 更新帖子 ───
 func UpdatePost(c *gin.Context) {
 	id := c.Param("id")
-
-	var post models.Post
-	if err := config.DB.First(&post, id).Error; err != nil {
-		models.Error(c, http.StatusNotFound, "帖子不存在")
-		return
-	}
-	if !canManagePost(c, post) {
-		models.Error(c, http.StatusForbidden, "无权编辑此帖子")
-		return
-	}
+	userID := c.GetUint("user_id")
+	roles := c.GetStringSlice("roles")
 
 	var req struct {
 		Title   string `json:"title"`
@@ -108,37 +92,32 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
-	updates := map[string]interface{}{}
-	if req.Title != "" {
-		updates["title"] = req.Title
-	}
-	if req.Content != "" {
-		updates["content"] = req.Content
-	}
-	if len(updates) == 0 {
-		models.Error(c, http.StatusBadRequest, "没有要更新的内容")
+	post, err := service.UpdatePost(strToUint(id), userID, req.Title, req.Content, roles)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	config.DB.Model(&post).Updates(updates)
 	models.Success(c, "更新成功", gin.H{"post": post})
 }
 
-// ========== 删除帖子 ==========
+// ─── 删除帖子 ───
 func DeletePost(c *gin.Context) {
 	id := c.Param("id")
+	userID := c.GetUint("user_id")
+	roles := c.GetStringSlice("roles")
 
-	var post models.Post
-	if err := config.DB.First(&post, id).Error; err != nil {
-		models.Error(c, http.StatusNotFound, "帖子不存在")
-		return
-	}
-	if !canManagePost(c, post) {
-		models.Error(c, http.StatusForbidden, "无权删除此帖子")
+	if err := service.DeletePost(strToUint(id), userID, roles); err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	config.DB.Where("post_id = ?", post.ID).Delete(&models.Comment{})
-	config.DB.Delete(&post)
 	models.Success(c, "删除成功", nil)
+}
+
+func strToUint(s string) uint {
+	v, _ := strconv.Atoi(s)
+	return uint(v)
 }

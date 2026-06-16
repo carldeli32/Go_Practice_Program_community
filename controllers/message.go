@@ -4,15 +4,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"community/config"
+	"community/data"
 	"community/models"
+	"community/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-// ========== 创建对话主题 ==========
-// POST /api/threads  (需登录)
-// Body: { "with_user_id": 2, "title": "旅行计划" }
+// ─── 创建对话主题 ───
 func CreateThread(c *gin.Context) {
 	var req struct {
 		WithUserID uint   `json:"with_user_id" binding:"required"`
@@ -22,77 +21,46 @@ func CreateThread(c *gin.Context) {
 		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
-	myID := c.GetUint("user_id")
-	if myID == req.WithUserID {
-		models.Error(c, http.StatusBadRequest, "不能和自己对话")
+
+	thread, err := service.CreateThread(c.GetUint("user_id"), req.WithUserID, req.Title)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	// 标准化 user_a < user_b 避免重复主题判断问题
-	a, b := myID, req.WithUserID
-	if a > b {
-		a, b = b, a
-	}
-
-	thread := models.Thread{Title: req.Title, UserAID: a, UserBID: b}
-	if err := config.DB.Create(&thread).Error; err != nil {
-		models.Error(c, http.StatusInternalServerError, "创建失败")
-		return
-	}
 	models.Success(c, "主题已创建 📌", gin.H{"thread": thread})
 }
 
-// ========== 获取与某人的所有主题 ==========
-// GET /api/threads?with=2  (需登录)
+// ─── 获取与某人的所有主题 ───
 func GetThreads(c *gin.Context) {
 	myID := c.GetUint("user_id")
 	withID, _ := strconv.Atoi(c.Query("with"))
 
-	var threads []models.Thread
-	config.DB.Where(
-		"(user_a_id = ? AND user_b_id = ?) OR (user_a_id = ? AND user_b_id = ?)",
-		myID, withID, withID, myID,
-	).Order("created_at ASC").Find(&threads)
-
-	// 统计每个主题的消息数
-	type threadItem struct {
-		models.Thread
-		MessageCount int64 `json:"message_count"`
-	}
-	items := make([]threadItem, len(threads))
-	for i, t := range threads {
-		var count int64
-		config.DB.Model(&models.Message{}).Where("thread_id = ?", t.ID).Count(&count)
-		items[i] = threadItem{Thread: t, MessageCount: count}
+	threads, err := service.GetThreads(myID, uint(withID))
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
+		return
 	}
 
-	models.Success(c, "获取成功", gin.H{"threads": items})
+	models.Success(c, "获取成功", gin.H{"threads": threads})
 }
 
-// ========== 删除主题 ==========
-// DELETE /api/threads/:id  (需登录)
+// ─── 删除主题 ───
 func DeleteThread(c *gin.Context) {
 	myID := c.GetUint("user_id")
-	id := c.Param("id")
 
-	var thread models.Thread
-	if err := config.DB.First(&thread, id).Error; err != nil {
-		models.Error(c, http.StatusNotFound, "主题不存在")
-		return
-	}
-	if thread.UserAID != myID && thread.UserBID != myID {
-		models.Error(c, http.StatusForbidden, "无权操作")
+	if err := service.DeleteThread(strToUint(c.Param("id")), myID); err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	config.DB.Where("thread_id = ?", thread.ID).Delete(&models.Message{})
-	config.DB.Delete(&thread)
 	models.Success(c, "已删除", nil)
 }
 
-// ========== 发送私信（指定主题）==========
-// POST /api/messages  (需登录)
-// Body: { "to_user_id": 2, "thread_id": 1, "content": "你好！" }
+// ─── 发送私信 ───
 func SendMessage(c *gin.Context) {
 	var req struct {
 		ToUserID uint   `json:"to_user_id" binding:"required"`
@@ -104,122 +72,66 @@ func SendMessage(c *gin.Context) {
 		return
 	}
 
-	fromUserID := c.GetUint("user_id")
-	if fromUserID == req.ToUserID {
-		models.Error(c, http.StatusBadRequest, "不能给自己发私信")
+	msg, err := service.SendMessage(c.GetUint("user_id"), req.ToUserID, req.ThreadID, req.Content)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	var toUser models.User
-	if err := config.DB.First(&toUser, req.ToUserID).Error; err != nil {
-		models.Error(c, http.StatusNotFound, "用户不存在")
-		return
-	}
-
-	msg := models.Message{
-		ThreadID:   req.ThreadID,
-		FromUserID: fromUserID,
-		ToUserID:   req.ToUserID,
-		Content:    req.Content,
-	}
-	if err := config.DB.Create(&msg).Error; err != nil {
-		models.Error(c, http.StatusInternalServerError, "发送失败")
-		return
-	}
-	config.DB.Preload("FromUser").Preload("ToUser").First(&msg, msg.ID)
 	models.Success(c, "发送成功 ✉️", gin.H{"message": msg})
 }
 
-// ========== 会话列表（按主题分组）==========
+// ─── 会话列表 ───
 func GetConversations(c *gin.Context) {
 	userID := c.GetUint("user_id")
 
-	var messages []models.Message
-	config.DB.Where("from_user_id = ? OR to_user_id = ?", userID, userID).
-		Preload("FromUser").Preload("ToUser").
-		Order("created_at DESC").
-		Find(&messages)
-
-	type Conversation struct {
-		Partner     models.User    `json:"partner"`
-		LastMessage models.Message `json:"last_message"`
-		UnreadCount int64          `json:"unread_count"`
-	}
-
-	seen := make(map[uint]bool)
-	var conversations []Conversation
-
-	for _, msg := range messages {
-		var partner models.User
-		if msg.FromUserID == userID {
-			partner = msg.ToUser
-		} else {
-			partner = msg.FromUser
-		}
-		if seen[partner.ID] {
-			continue
-		}
-		seen[partner.ID] = true
-
-		var unread int64
-		config.DB.Model(&models.Message{}).
-			Where("from_user_id = ? AND to_user_id = ? AND is_read = false", partner.ID, userID).
-			Count(&unread)
-
-		conversations = append(conversations, Conversation{
-			Partner:     partner,
-			LastMessage: msg,
-			UnreadCount: unread,
-		})
+	conversations, err := service.GetConversations(userID)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
+		return
 	}
 
 	models.Success(c, "获取成功", gin.H{"conversations": conversations})
 }
 
-// ========== 与某人的某主题对话详情 ==========
-// GET /api/messages/:user_id?thread=1  (需登录)
+// ─── 对话详情 ───
 func GetConversation(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	partnerID, _ := strconv.Atoi(c.Param("user_id"))
 	threadID, _ := strconv.Atoi(c.DefaultQuery("thread", "0"))
 
-	var messages []models.Message
-	query := config.DB.Where(
-		"(from_user_id = ? AND to_user_id = ?) OR (from_user_id = ? AND to_user_id = ?)",
-		userID, partnerID, partnerID, userID,
-	)
-	if threadID > 0 {
-		query = query.Where("thread_id = ?", threadID)
+	result, err := service.GetConversation(userID, uint(partnerID), uint(threadID))
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
+		return
 	}
-	query.Preload("FromUser").Preload("ToUser").Order("created_at ASC").Find(&messages)
-
-	var partner models.User
-	config.DB.First(&partner, partnerID)
 
 	models.Success(c, "获取成功", gin.H{
-		"partner":  gin.H{"id": partner.ID, "username": partner.Username},
-		"messages": messages,
+		"partner":  result.Partner,
+		"messages": result.Messages,
 	})
 }
 
+// ─── 未读统计 ───
 func GetUnreadCount(c *gin.Context) {
-	userID := c.GetUint("user_id")
-	var count int64
-	config.DB.Model(&models.Message{}).Where("to_user_id = ? AND is_read = false", userID).Count(&count)
+	count, _ := data.CountUnread(c.GetUint("user_id"))
 	models.Success(c, "获取成功", gin.H{"count": count})
 }
 
+// ─── 全部标记已读 ───
 func MarkAllRead(c *gin.Context) {
-	userID := c.GetUint("user_id")
-	config.DB.Model(&models.Message{}).Where("to_user_id = ? AND is_read = false", userID).Update("is_read", true)
+	data.MarkAllRead(c.GetUint("user_id"))
 	models.Success(c, "已标记", nil)
 }
 
+// ─── 标记某人的消息已读 ───
 func MarkMessagesRead(c *gin.Context) {
 	userID := c.GetUint("user_id")
 	partnerID := c.Param("user_id")
-	config.DB.Model(&models.Message{}).
-		Where("from_user_id = ? AND to_user_id = ? AND is_read = false", partnerID, userID).
-		Update("is_read", true)
+	uid, _ := strconv.Atoi(partnerID)
+	data.MarkReadFrom(uint(uid), userID)
 	models.Success(c, "已标记", nil)
 }

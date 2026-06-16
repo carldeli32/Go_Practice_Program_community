@@ -4,15 +4,13 @@ import (
 	"net/http"
 	"strconv"
 
-	"community/config"
-	"community/middlewares"
 	"community/models"
+	"community/service"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/crypto/bcrypt"
 )
 
-// ========== 注册 ==========
+// ─── 注册 ───
 // POST /api/register
 func Register(c *gin.Context) {
 	var req struct {
@@ -29,31 +27,10 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// 查重
-	var exist models.User
-	if err := config.DB.Where("username = ?", req.Username).First(&exist).Error; err == nil {
-		models.Error(c, http.StatusConflict, "用户名已被注册")
-		return
-	}
-
-	// bcrypt 加密
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	user, err := service.Register(req.Username, req.Password, req.Email, req.Gender, req.Motto, req.Job, req.Age)
 	if err != nil {
-		models.Error(c, http.StatusInternalServerError, "密码加密失败")
-		return
-	}
-
-	user := models.User{
-		Username: req.Username,
-		Password: string(hashedPassword),
-		Email:    req.Email,
-		Gender:   req.Gender,
-		Age:      req.Age,
-		Job:      req.Job,
-		Motto:    req.Motto,
-	}
-	if err := config.DB.Create(&user).Error; err != nil {
-		models.Error(c, http.StatusInternalServerError, "注册失败")
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
@@ -68,7 +45,7 @@ func Register(c *gin.Context) {
 	})
 }
 
-// ========== 登录 ==========
+// ─── 登录 ───
 // POST /api/login
 func Login(c *gin.Context) {
 	var req struct {
@@ -80,25 +57,10 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	if err := config.DB.Where("username = ?", req.Username).Preload("Roles").First(&user).Error; err != nil {
-		models.Error(c, http.StatusUnauthorized, "用户名或密码错误")
-		return
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		models.Error(c, http.StatusUnauthorized, "用户名或密码错误")
-		return
-	}
-
-	if user.IsBanned {
-		models.Error(c, http.StatusForbidden, "账号已被封禁，请联系管理员")
-		return
-	}
-
-	token, err := middlewares.GenerateToken(user.ID, user.Username)
+	token, user, err := service.Login(req.Username, req.Password)
 	if err != nil {
-		models.Error(c, http.StatusInternalServerError, "Token 生成失败")
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
@@ -118,62 +80,46 @@ func Login(c *gin.Context) {
 	})
 }
 
-// ========== 用户主页 ==========
+// ─── 用户主页 ───
 // GET /api/users/:id
 func GetUserProfile(c *gin.Context) {
 	id := c.Param("id")
-
 	uid, err := strconv.Atoi(id)
 	if err != nil {
 		models.Error(c, http.StatusBadRequest, "无效的用户 ID")
 		return
 	}
 
-	var user models.User
-	if err := config.DB.First(&user, uid).Error; err != nil {
-		models.Error(c, http.StatusNotFound, "用户不存在")
+	// 获取当前登录用户 ID（可选）
+	var currentUID uint
+	if v, exists := c.Get("user_id"); exists {
+		currentUID = v.(uint)
+	}
+
+	result, err := service.GetUserProfile(uint(uid), currentUID)
+	if err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
 		return
 	}
 
-	// 统计发帖数和评论数
-	var postCount, commentCount int64
-	config.DB.Model(&models.Post{}).Where("user_id = ?", user.ID).Count(&postCount)
-	config.DB.Model(&models.Comment{}).Where("user_id = ?", user.ID).Count(&commentCount)
-
-	// 统计关注数和粉丝数
-	var followerCount, followingCount, isFollowing int64
-	config.DB.Model(&models.Follow{}).Where("followee_id = ?", user.ID).Count(&followerCount)
-	config.DB.Model(&models.Follow{}).Where("follower_id = ?", user.ID).Count(&followingCount)
-	// 检查当前登录用户是否关注了此人
-	if uid, exists := c.Get("user_id"); exists {
-		config.DB.Model(&models.Follow{}).
-			Where("follower_id = ? AND followee_id = ?", uid, user.ID).
-			Count(&isFollowing)
-	}
-
-	// 查该用户的帖子列表
-	var posts []models.Post
-	config.DB.Where("user_id = ?", user.ID).Order("created_at DESC").Limit(10).Find(&posts)
-
-	level := user.Level(config.DB)
-
 	models.Success(c, "获取成功", gin.H{
 		"user": gin.H{
-			"id":              user.ID,
-			"username":        user.Username,
-			"email":           user.Email,
-			"gender":          user.Gender,
-			"age":             user.Age,
-			"job":             user.Job,
-			"motto":           user.Motto,
-			"created_at":      user.CreatedAt,
-			"post_count":      postCount,
-			"comment_count":   commentCount,
-			"follower_count":  followerCount,
-			"following_count": followingCount,
-			"is_following":    isFollowing > 0,
-			"level":           level,
+			"id":              result.User.ID,
+			"username":        result.User.Username,
+			"email":           result.User.Email,
+			"gender":          result.User.Gender,
+			"age":             result.User.Age,
+			"job":             result.User.Job,
+			"motto":           result.User.Motto,
+			"created_at":      result.User.CreatedAt,
+			"post_count":      result.PostCount,
+			"comment_count":   result.CommentCount,
+			"follower_count":  result.FollowerCount,
+			"following_count": result.FollowingCount,
+			"is_following":    result.IsFollowing,
+			"level":           result.Level,
 		},
-		"posts": posts,
+		"posts": result.Posts,
 	})
 }

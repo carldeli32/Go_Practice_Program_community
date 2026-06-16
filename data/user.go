@@ -154,21 +154,35 @@ func AppendUserRole(userID uint, roleName string) error {
 
 // ─── 级联清理 ───
 
-// DeleteUserContent 删除某用户所有内容（帖、评论、私信、关注）
+// DeleteUserContent 删除某用户所有内容（帖、评论、私信、关注），在事务内执行
 func DeleteUserContent(userID uint) error {
 	return config.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", userID).Delete(&models.Post{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", userID).Delete(&models.Comment{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("from_user_id = ? OR to_user_id = ?", userID, userID).Delete(&models.Message{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("follower_id = ? OR followee_id = ?", userID, userID).Delete(&models.Follow{}).Error; err != nil {
-			return err
-		}
-		return nil
+		return deleteUserContentTx(tx, userID)
 	})
+}
+
+// DeleteUserCascade 删除用户 + 级联清理所有内容，单个事务保证原子性
+func DeleteUserCascade(userID uint) error {
+	return config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := deleteUserContentTx(tx, userID); err != nil {
+			return err
+		}
+		return tx.Delete(&models.User{}, userID).Error
+	})
+}
+
+func deleteUserContentTx(tx *gorm.DB, userID uint) error {
+	if err := tx.Where("user_id = ?", userID).Delete(&models.Post{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("user_id = ?", userID).Delete(&models.Comment{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("from_user_id = ? OR to_user_id = ?", userID, userID).Delete(&models.Message{}).Error; err != nil {
+		return err
+	}
+	if err := tx.Where("follower_id = ? OR followee_id = ?", userID, userID).Delete(&models.Follow{}).Error; err != nil {
+		return err
+	}
+	return nil
 }
