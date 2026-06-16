@@ -50,8 +50,8 @@ async function fetchData() {
       api.get('/following'),
       api.get('/followers'),
     ])
-    following.value = fingRes.data.users
-    followers.value = ferRes.data.users
+    following.value = fingRes.data.data.users
+    followers.value = ferRes.data.data.users
   } catch (e) {
     console.error(e)
   }

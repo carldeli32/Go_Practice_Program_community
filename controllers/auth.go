@@ -81,7 +81,7 @@ func Login(c *gin.Context) {
 	}
 
 	var user models.User
-	if err := config.DB.Where("username = ?", req.Username).First(&user).Error; err != nil {
+	if err := config.DB.Where("username = ?", req.Username).Preload("Roles").First(&user).Error; err != nil {
 		models.Error(c, http.StatusUnauthorized, "用户名或密码错误")
 		return
 	}
@@ -112,7 +112,8 @@ func Login(c *gin.Context) {
 			"age":      user.Age,
 			"job":      user.Job,
 			"motto":    user.Motto,
-			"is_admin": user.IsAdmin,
+			"is_admin": user.IsAdminLike(),
+			"roles":    user.RoleNames(),
 		},
 	})
 }

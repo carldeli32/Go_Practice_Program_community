@@ -31,7 +31,7 @@ api.interceptors.response.use(
       window.location.href = '/login'
       return Promise.reject(new Error('登录已过期，请重新登录'))
     }
-    const msg = error.response?.data?.error || '网络错误'
+    const msg = error.response?.data?.message || '网络错误'
     return Promise.reject(new Error(msg))
   }
 )

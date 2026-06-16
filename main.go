@@ -12,6 +12,7 @@ func main() {
 	config.InitDB()
 
 	r := gin.Default()
+	r.SetTrustedProxies(nil) // 本地开发，禁用代理信任检查
 	routes.Setup(r)
 	r.Run(":8080")
 }

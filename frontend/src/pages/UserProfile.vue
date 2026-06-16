@@ -102,8 +102,8 @@ const followLoading = ref(false)
 async function fetchProfile() {
   try {
     const res = await api.get(`/users/${route.params.id}`)
-    user.value = res.data.user
-    posts.value = res.data.posts
+    user.value = res.data.data.user
+    posts.value = res.data.data.posts
   } catch (e) {
     console.error(e)
   }

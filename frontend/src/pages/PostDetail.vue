@@ -6,6 +6,8 @@
         <router-link :to="`/user/${post.user?.id}`" class="user-link">@{{ post.user?.username || '匿名' }}</router-link>
         <span>·</span>
         <span>{{ formatDate(post.created_at) }}</span>
+        <span>·</span>
+        <el-tag size="small" type="info" v-if="post.category">{{ getCategoryIcon(post.category.name) }} {{ post.category.name }}</el-tag>
       </div>
       <div class="post-body">{{ post.content }}</div>
     </el-card>
@@ -81,8 +83,8 @@ async function load() {
       api.get(`/posts/${route.params.id}`),
       api.get(`/posts/${route.params.id}/comments`),
     ])
-    post.value = p.data.post
-    comments.value = c.data.comments || []
+    post.value = p.data.data.post
+    comments.value = c.data.data.comments || []
   } catch (e) {
     console.error(e)
   }
@@ -117,6 +119,10 @@ function handleDeletePost() {
     .then(() => api.delete(`/posts/${route.params.id}`))
     .then(() => { ElMessage.success('已删除'); router.push('/') })
     .catch(() => {})
+}
+function getCategoryIcon(name) {
+  const icons = { '综合讨论': '💬', '技术交流': '💻', '军事纵横': '⚔️', '历史长廊': '📜', '文学艺术': '🎨', '生活杂谈': '🌻' }
+  return icons[name] || '📌'
 }
 function formatDate(s) { return s ? new Date(s).toLocaleString('zh-CN') : '' }
 

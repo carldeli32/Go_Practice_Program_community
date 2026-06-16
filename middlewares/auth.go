@@ -36,11 +36,9 @@ func GenerateToken(userID uint, username string) (string, error) {
 	return token.SignedString(JWTSecret)
 }
 
-// AuthRequired JWT 鉴权中间件
-// 用法：router.Use(middlewares.AuthRequired()) 或路由组级别使用
+// AuthRequired JWT 鉴权中间件（加载角色 + 封禁检查）
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 1. 从 Header 取 Token
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
 			models.Error(c, http.StatusUnauthorized, "请先登录")
@@ -48,7 +46,6 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 2. 格式校验：必须是 "Bearer <token>"
 		parts := strings.SplitN(authHeader, " ", 2)
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			models.Error(c, http.StatusUnauthorized, "Token 格式错误")
@@ -56,7 +53,6 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 3. 解析并验证 Token
 		tokenString := parts[1]
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
@@ -69,24 +65,26 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// 4. 检查用户是否仍然存在
+		// 查出用户 + 角色
 		var user models.User
-		if err := config.DB.First(&user, claims.UserID).Error; err != nil {
+		if err := config.DB.Preload("Roles").First(&user, claims.UserID).Error; err != nil {
 			models.Error(c, http.StatusUnauthorized, "用户不存在，请重新登录")
 			c.Abort()
 			return
 		}
 
-		// 5. 检查是否被封禁
+		// 全站封禁检查
 		if user.IsBanned {
 			models.Error(c, http.StatusForbidden, "账号已被封禁")
 			c.Abort()
 			return
 		}
 
-		// 6. 把用户信息存入上下文
-		c.Set("user_id", claims.UserID)
+		// 注入上下文
+		c.Set("user_id", user.ID)
 		c.Set("username", claims.Username)
+		c.Set("roles", user.RoleNames())
+		c.Set("is_admin", user.IsAdminLike()) // 前端兼容
 		c.Next()
 	}
 }

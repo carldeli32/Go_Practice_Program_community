@@ -21,6 +21,12 @@ func CreateComment(c *gin.Context) {
 		return
 	}
 
+	// 禁言检查
+	if muted, msg := checkMuted(c, post); muted {
+		models.Error(c, http.StatusForbidden, msg)
+		return
+	}
+
 	var req struct {
 		Content string `json:"content" binding:"required,min=1"`
 	}
@@ -48,7 +54,7 @@ func GetComments(c *gin.Context) {
 
 	// 尝试从 token 获取当前用户身份
 	currentUserID := uint(0)
-	isAdmin := false
+	roleNames := []string{}
 	authHeader := c.GetHeader("Authorization")
 	if authHeader != "" {
 		parts := strings.SplitN(authHeader, " ", 2)
@@ -60,8 +66,8 @@ func GetComments(c *gin.Context) {
 			if err == nil && token.Valid {
 				currentUserID = claims.UserID
 				var u models.User
-				if err := config.DB.First(&u, currentUserID).Error; err == nil {
-					isAdmin = u.IsAdmin
+				if err := config.DB.Preload("Roles").First(&u, currentUserID).Error; err == nil {
+					roleNames = u.RoleNames()
 				}
 			}
 		}
@@ -75,20 +81,35 @@ func GetComments(c *gin.Context) {
 
 	var items []commentItem
 	for _, c := range comments {
+		canEdit := c.UserID == currentUserID
+		canDelete := c.UserID == currentUserID
+		if !canEdit && models.HasPerm(roleNames, "comment.manage_any") {
+			canEdit, canDelete = true, true
+		}
+		if !canEdit && models.HasPerm(roleNames, "comment.manage_category") {
+			var post models.Post
+			config.DB.First(&post, c.PostID)
+			var count int64
+			config.DB.Model(&models.ModeratorCategory{}).
+				Where("user_id = ? AND category_id = ?", currentUserID, post.CategoryID).
+				Count(&count)
+			if count > 0 {
+				canEdit, canDelete = true, true
+			}
+		}
 		items = append(items, commentItem{
 			Comment:   c,
-			CanEdit:   c.UserID == currentUserID || isAdmin,
-			CanDelete: c.UserID == currentUserID || isAdmin,
+			CanEdit:   canEdit,
+			CanDelete: canDelete,
 		})
 	}
 
 	models.Success(c, "获取成功", gin.H{"comments": items, "total": len(items)})
 }
 
-// ========== 编辑评论（作者本人或管理员）==========
+// ========== 编辑评论 ==========
 func UpdateComment(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.GetUint("user_id")
 
 	var comment models.Comment
 	if err := config.DB.First(&comment, id).Error; err != nil {
@@ -96,10 +117,7 @@ func UpdateComment(c *gin.Context) {
 		return
 	}
 
-	// 权限检查
-	var user models.User
-	config.DB.First(&user, userID)
-	if comment.UserID != userID && !user.IsAdmin {
+	if !canManageComment(c, comment) {
 		models.Error(c, http.StatusForbidden, "无权操作")
 		return
 	}
@@ -117,10 +135,9 @@ func UpdateComment(c *gin.Context) {
 	models.Success(c, "已更新", gin.H{"comment": comment})
 }
 
-// ========== 删除评论（作者本人或管理员）==========
+// ========== 删除评论 ==========
 func DeleteComment(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.GetUint("user_id")
 
 	var comment models.Comment
 	if err := config.DB.First(&comment, id).Error; err != nil {
@@ -128,9 +145,7 @@ func DeleteComment(c *gin.Context) {
 		return
 	}
 
-	var user models.User
-	config.DB.First(&user, userID)
-	if comment.UserID != userID && !user.IsAdmin {
+	if !canManageComment(c, comment) {
 		models.Error(c, http.StatusForbidden, "无权操作")
 		return
 	}

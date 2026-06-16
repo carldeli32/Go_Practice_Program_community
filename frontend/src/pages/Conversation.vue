@@ -72,7 +72,7 @@ const newThreadTitle = ref('')
 
 async function loadThreads() {
   const res = await api.get('/threads', { params: { with: route.params.id } })
-  threads.value = res.data.threads
+  threads.value = res.data.data.threads
   if (threads.value.length > 0 && !activeThread.value) {
     activeThread.value = threads.value[0].id
   }
@@ -81,8 +81,8 @@ async function loadThreads() {
 
 async function loadMessages() {
   const res = await api.get(`/messages/${route.params.id}`, { params: { thread: activeThread.value } })
-  partner.value = res.data.partner
-  messages.value = res.data.messages
+  partner.value = res.data.data.partner
+  messages.value = res.data.data.messages
   await api.put(`/messages/${route.params.id}/read`)
   scrollToBottom()
 }
@@ -102,11 +102,11 @@ function createThread() {
     .then(res => {
       showNewThread.value = false
       newThreadTitle.value = ''
-      const tid = res.data.thread.id
+      const tid = res.data.data.thread.id
       return api.get('/threads', { params: { with: route.params.id } })
     })
     .then(res => {
-      threads.value = res.data.threads
+      threads.value = res.data.data.threads
       activeThread.value = threads.value[threads.value.length - 1].id
       return loadMessages()
     })

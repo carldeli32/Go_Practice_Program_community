@@ -85,14 +85,14 @@ async function handleSubmit() {
   try {
     const url = isRegister.value ? '/register' : '/login'
     const res = await api.post(url, form)
-    const data = res.data
+    const body = res.data
 
     if (isRegister.value) {
       // 注册成功后自动登录
       const loginRes = await api.post('/login', { username: form.username, password: form.password })
-      login(loginRes.data.token, loginRes.data.user)
+      login(loginRes.data.data.token, loginRes.data.data.user)
     } else {
-      login(data.token, data.user)
+      login(body.data.token, body.data.user)
     }
     router.push('/')
   } catch (e) {

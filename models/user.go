@@ -15,8 +15,8 @@ type User struct {
 	Age       int       `gorm:"default:0" json:"age"`
 	Job       string    `gorm:"size:100;default:''" json:"job"`
 	Motto     string    `gorm:"size:200;default:''" json:"motto"`
-	IsAdmin   bool      `gorm:"default:false" json:"is_admin"`
 	IsBanned  bool      `gorm:"default:false" json:"is_banned"`
+	Roles     []Role    `gorm:"many2many:user_roles;" json:"roles,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -25,6 +25,35 @@ type UserLevel struct {
 	Name  string `json:"name"`
 	Badge string `json:"badge"`
 	Level int    `json:"level"`
+}
+
+// RoleNames 返回角色的字符串切片
+func (u *User) RoleNames() []string {
+	names := make([]string, len(u.Roles))
+	for i, r := range u.Roles {
+		names[i] = r.Name
+	}
+	return names
+}
+
+// HasRole 检查用户是否拥有某个角色
+func (u *User) HasRole(name string) bool {
+	for _, r := range u.Roles {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// IsAdminLike 检查用户是否是管理员级别（admin 或 super_admin）
+func (u *User) IsAdminLike() bool {
+	return u.HasRole("admin") || u.HasRole("super_admin")
+}
+
+// HasPerm 检查用户是否拥有指定权限
+func (u *User) HasPerm(perm string) bool {
+	return HasPerm(u.RoleNames(), perm)
 }
 
 // Level 计算用户等级（需传入 DB，由调用方提供）

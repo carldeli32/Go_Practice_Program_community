@@ -7,7 +7,7 @@
       </el-menu-item>
       <div class="nav-right">
         <template v-if="auth.token">
-          <el-button @click="$router.push('/create')" type="primary" size="small">
+          <el-button @click="goCreate" type="primary" size="small">
             <el-icon><Edit /></el-icon> 发帖
           </el-button>
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
@@ -47,6 +47,13 @@ import api from './api'
 const auth = useAuth()
 const router = useRouter()
 const unreadCount = ref(0)
+
+function goCreate() {
+  const query = {}
+  const catId = router.currentRoute.value.query.category_id
+  if (catId) query.category_id = catId
+  router.push({ path: '/create', query })
+}
 
 function handleLogout() {
   logout()

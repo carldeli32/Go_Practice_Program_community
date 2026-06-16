@@ -43,7 +43,7 @@ const conversations = ref([])
 async function fetchConversations() {
   try {
     const res = await api.get('/messages')
-    conversations.value = res.data.conversations
+    conversations.value = res.data.data.conversations
   } catch (e) {
     console.error(e)
   }
@@ -64,7 +64,7 @@ function markAllRead() {
     .then(() => {
       conversations.value.forEach(c => c.unread_count = 0)
       ElMessage.success('全部已读')
-      fetchConversations()  // 刷新列表
+      fetchConversations()
     })
     .catch(e => console.error(e))
 }

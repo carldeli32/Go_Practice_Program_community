@@ -20,10 +20,12 @@ func Setup(r *gin.Engine) {
 		api.GET("/posts/:id", controllers.GetPost)
 		api.GET("/posts/:id/comments", controllers.GetComments)
 		api.GET("/announcement", controllers.GetAnnouncement)
+		api.GET("/categories", controllers.GetCategories)
 
 		auth := api.Group("")
 		auth.Use(middlewares.AuthRequired())
 		{
+			// 发帖 / 评论（所有登录用户）
 			auth.POST("/posts", controllers.CreatePost)
 			auth.PUT("/posts/:id", controllers.UpdatePost)
 			auth.DELETE("/posts/:id", controllers.DeletePost)
@@ -32,6 +34,7 @@ func Setup(r *gin.Engine) {
 			auth.PUT("/comments/:id", controllers.UpdateComment)
 			auth.DELETE("/comments/:id", controllers.DeleteComment)
 
+			// 私信
 			auth.POST("/threads", controllers.CreateThread)
 			auth.GET("/threads", controllers.GetThreads)
 			auth.DELETE("/threads/:id", controllers.DeleteThread)
@@ -43,20 +46,38 @@ func Setup(r *gin.Engine) {
 			auth.GET("/messages/:user_id", controllers.GetConversation)
 			auth.PUT("/messages/:user_id/read", controllers.MarkMessagesRead)
 
+			// 关注
 			auth.POST("/follow", controllers.FollowUser)
 			auth.DELETE("/follow/:user_id", controllers.UnfollowUser)
 			auth.GET("/following", controllers.GetMyFollowing)
 			auth.GET("/followers", controllers.GetMyFollowers)
 
+			// 管理员面板
 			admin := auth.Group("/admin")
-			admin.Use(middlewares.AdminRequired())
 			{
-				admin.GET("/users", controllers.AdminListUsers)
-				admin.POST("/users", controllers.AdminCreateUser)
-				admin.PUT("/users/:id/ban", controllers.BanUser)
-				admin.PUT("/users/:id/unban", controllers.UnbanUser)
-				admin.POST("/announcement", controllers.SetAnnouncement)
-				admin.DELETE("/announcement", controllers.DeleteAnnouncement)
+				// 管理员级别（admin + super_admin）
+				adminLevel := admin.Group("")
+				adminLevel.Use(middlewares.RequireAdmin())
+				{
+					adminLevel.PUT("/users/:id/ban", controllers.BanUser)
+					adminLevel.PUT("/users/:id/unban", controllers.UnbanUser)
+					adminLevel.GET("/users", controllers.AdminListUsers)
+					adminLevel.POST("/announcement", controllers.SetAnnouncement)
+					adminLevel.DELETE("/announcement", controllers.DeleteAnnouncement)
+				}
+
+				// 仅 super_admin：创建用户
+				admin.POST("/users", middlewares.RequirePerm("user.create"), controllers.AdminCreateUser)
+
+				// 仅 super_admin：删除用户
+				admin.DELETE("/users/:id", middlewares.RequirePerm("user.delete"), controllers.AdminDeleteUser)
+
+				// 仅 super_admin：角色管理
+				admin.PUT("/users/:id/roles", middlewares.RequirePerm("role.assign"), controllers.AdminAssignRoles)
+
+				// 仅 super_admin：分类管理
+				admin.POST("/categories", middlewares.RequirePerm("category.manage"), controllers.CreateCategory)
+				admin.DELETE("/categories/:id", middlewares.RequirePerm("category.manage"), controllers.DeleteCategory)
 			}
 		}
 	}

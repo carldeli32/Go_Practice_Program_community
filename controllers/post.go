@@ -10,28 +10,32 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 检查用户是否是管理员
-func isAdminUser(userID uint) bool {
-	var user models.User
-	if err := config.DB.First(&user, userID).Error; err != nil {
-		return false
-	}
-	return user.IsAdmin
-}
-
 // ========== 创建帖子 ==========
 func CreatePost(c *gin.Context) {
 	var req struct {
-		Title   string `json:"title" binding:"required,min=1,max=200"`
-		Content string `json:"content" binding:"required,min=1"`
+		Title      string `json:"title" binding:"required,min=1,max=200"`
+		Content    string `json:"content" binding:"required,min=1"`
+		CategoryID *uint  `json:"category_id"` // nil 时默认综合讨论(1)
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		models.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
 		return
 	}
 
+	categoryID := uint(1)
+	if req.CategoryID != nil {
+		categoryID = *req.CategoryID
+	}
+
 	userID := c.GetUint("user_id")
-	post := models.Post{Title: req.Title, Content: req.Content, UserID: userID}
+	post := models.Post{Title: req.Title, Content: req.Content, UserID: userID, CategoryID: categoryID}
+
+	// 禁言检查
+	if muted, msg := checkMuted(c, post); muted {
+		models.Error(c, http.StatusForbidden, msg)
+		return
+	}
+
 	if err := config.DB.Create(&post).Error; err != nil {
 		models.Error(c, http.StatusInternalServerError, "发帖失败")
 		return
@@ -50,12 +54,22 @@ func GetPosts(c *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
+	categoryIDStr := c.DefaultQuery("category_id", "")
+	q := c.DefaultQuery("q", "")
 	offset := (page - 1) * pageSize
 
 	var posts []models.Post
 	var total int64
-	config.DB.Model(&models.Post{}).Count(&total)
-	config.DB.Preload("User").Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&posts)
+
+	baseQuery := config.DB.Model(&models.Post{})
+	if categoryIDStr != "" {
+		baseQuery = baseQuery.Where("category_id = ?", categoryIDStr)
+	}
+	if q != "" {
+		baseQuery = baseQuery.Where("title LIKE ?", "%"+q+"%")
+	}
+	baseQuery.Count(&total)
+	baseQuery.Preload("User").Preload("Category").Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&posts)
 
 	models.Success(c, "获取成功", gin.H{"posts": posts, "total": total, "page": page, "page_size": pageSize})
 }
@@ -64,25 +78,24 @@ func GetPosts(c *gin.Context) {
 func GetPost(c *gin.Context) {
 	id := c.Param("id")
 	var post models.Post
-	if err := config.DB.Preload("User").First(&post, id).Error; err != nil {
+	if err := config.DB.Preload("User").Preload("Category").First(&post, id).Error; err != nil {
 		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
 	models.Success(c, "获取成功", gin.H{"post": post})
 }
 
-// ========== 更新帖子（作者或管理员）==========
+// ========== 更新帖子 ==========
 func UpdatePost(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.GetUint("user_id")
 
 	var post models.Post
 	if err := config.DB.First(&post, id).Error; err != nil {
 		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
-	if post.UserID != userID && !isAdminUser(userID) {
-		models.Error(c, http.StatusForbidden, "只能编辑自己的帖子")
+	if !canManagePost(c, post) {
+		models.Error(c, http.StatusForbidden, "无权编辑此帖子")
 		return
 	}
 
@@ -111,18 +124,17 @@ func UpdatePost(c *gin.Context) {
 	models.Success(c, "更新成功", gin.H{"post": post})
 }
 
-// ========== 删除帖子（作者或管理员）==========
+// ========== 删除帖子 ==========
 func DeletePost(c *gin.Context) {
 	id := c.Param("id")
-	userID := c.GetUint("user_id")
 
 	var post models.Post
 	if err := config.DB.First(&post, id).Error; err != nil {
 		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
 	}
-	if post.UserID != userID && !isAdminUser(userID) {
-		models.Error(c, http.StatusForbidden, "只能删除自己的帖子")
+	if !canManagePost(c, post) {
+		models.Error(c, http.StatusForbidden, "无权删除此帖子")
 		return
 	}
 
