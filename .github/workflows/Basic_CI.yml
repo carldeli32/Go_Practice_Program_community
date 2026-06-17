@@ -1,0 +1,73 @@
+name: Basic_CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+  pull_request:
+    branches: [main]
+
+jobs:
+
+  # ═══════════════════════════════════════════════
+  # 阶段一：并行编译
+  #   backend-build + frontend-build 同时跑
+  # ═══════════════════════════════════════════════
+
+  backend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: go build ./...
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+
+  # ═══════════════════════════════════════════════
+  # 阶段二：静态分析
+  #   等 backend-build 和 frontend-build 都通过才跑
+  # ═══════════════════════════════════════════════
+
+  backend-vet:
+    needs: [backend-build, frontend-build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - run: go vet ./...
+
+  # ═══════════════════════════════════════════════
+  # 阶段三：汇总通知（无论成败都跑）
+  #   always() = 前面 job 挂了也照样执行
+  # ═══════════════════════════════════════════════
+
+  notify:
+    needs: [backend-build, frontend-build, backend-vet]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: 汇总结果
+        run: |
+          echo "=========================================="
+          echo "  community_ci 执行完毕"
+          echo "  backend-build   : ${{ needs.backend-build.result }}"
+          echo "  frontend-build  : ${{ needs.frontend-build.result }}"
+          echo "  backend-vet     : ${{ needs.backend-vet.result }}"
+          echo "=========================================="
