@@ -1,57 +1,75 @@
 <template>
-  <div class="detail" v-if="post.id">
-    <el-card>
-      <h2>{{ post.title }}</h2>
-      <div class="post-meta">
-        <router-link :to="`/user/${post.user?.id}`" class="user-link">@{{ post.user?.username || '匿名' }}</router-link>
-        <span>·</span>
-        <span>{{ formatDate(post.created_at) }}</span>
-        <span>·</span>
-        <el-tag size="small" type="info" v-if="post.category">{{ getCategoryIcon(post.category.name) }} {{ post.category.name }}</el-tag>
-      </div>
-      <div class="post-body">{{ post.content }}</div>
-    </el-card>
+  <div class="max-w-[800px] mx-auto">
+    <!-- Toast -->
+    <div v-if="toast.msg.value" :class="['fixed top-20 right-5 z-200 px-4 py-2 rounded-lg text-xs font-mono shadow-lg transition-all', toast.type.value === 'success' ? 'bg-success/20 border border-success/40 text-success' : toast.type.value === 'error' ? 'bg-danger/20 border border-danger/40 text-danger' : 'bg-warning/20 border border-warning/40 text-warning']">{{ toast.msg.value }}</div>
 
-    <div v-if="canModifyPost" style="margin-top:12px;display:flex;gap:8px;">
-      <el-button @click="$router.push({path:'/create', query:{edit:post.id}})">编辑</el-button>
-      <el-button type="danger" @click="handleDeletePost">删除</el-button>
-    </div>
-
-    <!-- 评论区 -->
-    <el-card style="margin-top:20px;">
-      <template #header><span>💬 评论 ({{ comments.length }})</span></template>
-      <div v-if="comments.length === 0" style="color:#999;text-align:center;padding:20px;">还没有评论，来抢沙发吧~</div>
-
-      <div v-for="c in comments" :key="c.id" class="comment-item">
-        <div class="comment-header">
-          <router-link :to="`/user/${c.user?.id}`" class="user-link">@{{ c.user?.username || '匿名' }}</router-link>
-          <span class="comment-time">{{ formatDate(c.created_at) }}</span>
+    <div v-if="post.id">
+      <!-- Post Card -->
+      <div class="bg-card border border-border rounded-lg p-5 mb-5">
+        <div class="flex items-center gap-2 mb-2 text-xs text-muted-fg">
+          <router-link :to="`/user/${post.user?.id}`" class="font-semibold text-primary hover:underline">@{{ post.user?.username || '匿名' }}</router-link>
+          <span>·</span>
+          <span class="font-mono">{{ fmtDate(post.created_at) }}</span>
+          <span>·</span>
+          <span class="text-[11px] text-primary font-mono bg-primary/10 border border-primary/20 rounded px-1.5">{{ getIcon(post.category?.name) }} {{ post.category?.name }}</span>
         </div>
-        <p class="comment-content" v-if="editingComment !== c.id">{{ c.content }}</p>
-        <div v-else class="edit-comment-area">
-          <el-input v-model="editCommentText" type="textarea" :rows="3" />
-          <div style="margin-top:6px;display:flex;gap:6px;">
-            <el-button size="small" type="primary" @click="saveEditComment(c.id)">保存</el-button>
-            <el-button size="small" @click="cancelEdit">取消</el-button>
+        <h1 class="text-xl font-bold text-fg font-heading tracking-wide mb-3">{{ post.title }}</h1>
+        <p class="text-sm text-fg/90 leading-relaxed whitespace-pre-wrap">{{ post.content }}</p>
+
+        <div v-if="canModifyPost" class="flex gap-2 mt-4 pt-3 border-t border-border">
+          <button @click="$router.push({path:'/create', query:{edit:post.id}})" class="px-3 py-1.5 bg-card border border-border rounded-md text-xs text-fg font-mono cursor-pointer hover:border-primary transition-colors">编辑</button>
+          <button @click="handleDeletePost" class="px-3 py-1.5 bg-card border border-danger/40 rounded-md text-xs text-danger font-mono cursor-pointer hover:bg-danger/10 transition-colors">删除</button>
+        </div>
+      </div>
+
+      <!-- Comments -->
+      <div class="bg-card border border-border rounded-lg p-5">
+        <h3 class="text-sm font-bold text-fg font-heading tracking-wide mb-4">💬 评论 ({{ comments.length }})</h3>
+
+        <div v-if="comments.length === 0" class="text-center text-muted-fg py-8 text-sm">还没有评论，来抢沙发吧~</div>
+
+        <div v-for="c in comments" :key="c.id" class="py-3 border-b border-border last:border-b-0">
+          <div class="flex justify-between mb-1.5">
+            <router-link :to="`/user/${c.user?.id}`" class="text-xs font-semibold text-primary hover:underline">@{{ c.user?.username || '匿名' }}</router-link>
+            <span class="text-[11px] text-muted-fg font-mono">{{ fmtDate(c.created_at) }}</span>
+          </div>
+          <p v-if="editingId !== c.id" class="text-xs text-fg/85 leading-relaxed mb-1.5">{{ c.content }}</p>
+          <div v-else class="mb-1.5">
+            <textarea v-model="editText" rows="3" class="w-full bg-input border border-border rounded-md p-2 text-xs text-fg placeholder-muted-fg outline-none focus:border-primary resize-none"></textarea>
+            <div class="flex gap-2 mt-1.5">
+              <button @click="saveEditComment(c.id)" class="px-3 py-1 bg-primary text-bg rounded text-[11px] font-bold font-heading tracking-wide cursor-pointer">保存</button>
+              <button @click="cancelEdit" class="px-3 py-1 bg-card border border-border rounded text-[11px] text-muted-fg font-mono cursor-pointer">取消</button>
+            </div>
+          </div>
+          <div v-if="c.can_edit || c.can_delete" class="flex gap-2 mt-1">
+            <button v-if="c.can_edit" @click="startEdit(c)" class="text-[10px] text-muted-fg hover:text-primary font-mono cursor-pointer bg-transparent border-0">编辑</button>
+            <button v-if="c.can_delete" @click="delComment(c.id)" class="text-[10px] text-muted-fg hover:text-danger font-mono cursor-pointer bg-transparent border-0">删除</button>
           </div>
         </div>
-        <div v-if="c.can_edit || c.can_delete" class="comment-actions">
-          <el-button text size="small" @click="startEdit(c)" v-if="c.can_edit">编辑</el-button>
-          <el-button text size="small" type="danger" @click="delComment(c.id)" v-if="c.can_delete">删除</el-button>
+
+        <!-- New Comment -->
+        <div v-if="isLoggedIn" class="mt-4 pt-4 border-t border-border">
+          <textarea v-model="commentText" rows="3" placeholder="写下你的评论..." class="w-full bg-input border border-border rounded-md p-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary resize-none"></textarea>
+          <button @click="doComment" class="mt-2 px-5 py-2 bg-primary text-bg rounded-md text-xs font-bold font-heading tracking-wide cursor-pointer hover:brightness-110 transition-all">发表</button>
+        </div>
+        <div v-else class="text-center mt-4 pt-4 border-t border-border">
+          <router-link to="/login" class="text-xs text-primary hover:underline">登录后发表评论</router-link>
         </div>
       </div>
 
-      <!-- 发表评论 -->
-      <div v-if="isLoggedIn" class="comment-form">
-        <el-input v-model="commentText" type="textarea" :rows="3" placeholder="写下你的评论..." />
-        <el-button type="primary" size="small" style="margin-top:8px;" @click="doComment">发表</el-button>
+      <!-- Confirm Dialog -->
+      <div v-if="confirmOpen" class="fixed inset-0 z-500 flex items-center justify-center bg-black/50" @click.self="confirmOpen = false">
+        <div class="bg-card border border-border rounded-lg p-6 max-w-[360px] w-full mx-4 shadow-2xl">
+          <p class="text-sm text-fg mb-4">{{ confirmMsg }}</p>
+          <div class="flex justify-end gap-2">
+            <button @click="confirmOpen = false" class="px-4 py-1.5 bg-card border border-border rounded text-xs text-muted-fg font-mono cursor-pointer">取消</button>
+            <button @click="onConfirm(); confirmOpen = false" class="px-4 py-1.5 bg-danger text-white rounded text-xs font-bold font-heading tracking-wide cursor-pointer">确定</button>
+          </div>
+        </div>
       </div>
-      <div v-else style="text-align:center;margin-top:12px;">
-        <el-link type="primary" @click="$router.push('/login')">登录后发表评论</el-link>
-      </div>
-    </el-card>
+    </div>
+    <div v-else-if="!loading" class="text-center text-muted-fg py-20 text-sm">帖子不存在</div>
   </div>
-  <div v-else-if="!loading" style="text-align:center;color:#999;padding:40px;">帖子不存在</div>
 </template>
 
 <script setup>
@@ -59,22 +77,15 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth, isLoggedIn } from '../stores/auth'
 import api from '../api'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { useToast } from '../composables/toast'
 
-const route = useRoute()
-const router = useRouter()
-const auth = useAuth()
-const loading = ref(true)
-const post = ref({})
-const comments = ref([])
-const commentText = ref('')
-const editingComment = ref(0)
-const editCommentText = ref('')
+const route = useRoute(); const router = useRouter(); const auth = useAuth()
+const loading = ref(true); const post = ref({}); const comments = ref([])
+const commentText = ref(''); const editingId = ref(0); const editText = ref('')
+const confirmOpen = ref(false); const confirmMsg = ref(''); let confirmCb = null
+const toast = useToast()
 
-const canModifyPost = computed(() => {
-  if (!auth.user || !post.value.id) return false
-  return auth.user.id === post.value.user_id || auth.user.is_admin
-})
+const canModifyPost = computed(() => auth.user && post.value.id && (auth.user.id === post.value.user_id || auth.user.is_admin))
 
 async function load() {
   loading.value = true
@@ -85,61 +96,31 @@ async function load() {
     ])
     post.value = p.data.data.post
     comments.value = c.data.data.comments || []
-  } catch (e) {
-    console.error(e)
-  }
-  loading.value = false
+  } catch (e) {} finally { loading.value = false }
 }
 
 function doComment() {
-  const txt = commentText.value.trim()
-  if (!txt) return
-  api.post(`/posts/${route.params.id}/comments`, { content: txt })
-    .then(() => { commentText.value = ''; ElMessage.success('评论成功'); load() })
-    .catch(e => ElMessage.error(e.message))
+  const t = commentText.value.trim(); if (!t) return
+  api.post(`/posts/${route.params.id}/comments`, { content: t })
+    .then(() => { commentText.value = ''; toast.success('评论成功'); load() })
+    .catch(e => toast.error(e.message))
 }
 
-function startEdit(c) { editingComment.value = c.id; editCommentText.value = c.content }
-function cancelEdit() { editingComment.value = 0; editCommentText.value = '' }
+function startEdit(c) { editingId.value = c.id; editText.value = c.content }
+function cancelEdit() { editingId.value = 0; editText.value = '' }
 function saveEditComment(id) {
-  const txt = editCommentText.value.trim()
-  if (!txt) return
-  api.put(`/comments/${id}`, { content: txt })
-    .then(() => { cancelEdit(); ElMessage.success('已更新'); load() })
-    .catch(e => ElMessage.error(e.message))
+  const t = editText.value.trim(); if (!t) return
+  api.put(`/comments/${id}`, { content: t })
+    .then(() => { cancelEdit(); toast.success('已更新'); load() })
+    .catch(e => toast.error(e.message))
 }
-function delComment(id) {
-  ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' })
-    .then(() => api.delete(`/comments/${id}`))
-    .then(() => { ElMessage.success('已删除'); load() })
-    .catch(() => {})
-}
-function handleDeletePost() {
-  ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' })
-    .then(() => api.delete(`/posts/${route.params.id}`))
-    .then(() => { ElMessage.success('已删除'); router.push('/') })
-    .catch(() => {})
-}
-function getCategoryIcon(name) {
-  const icons = { '综合讨论': '💬', '技术交流': '💻', '军事纵横': '⚔️', '历史长廊': '📜', '文学艺术': '🎨', '生活杂谈': '🌻' }
-  return icons[name] || '📌'
-}
-function formatDate(s) { return s ? new Date(s).toLocaleString('zh-CN') : '' }
+function delComment(id) { confirm('确定删除评论？', () => api.delete(`/comments/${id}`).then(() => { toast.success('已删除'); load() }).catch(e => toast.error(e.message))) }
+function handleDeletePost() { confirm('确定删除帖子？', () => api.delete(`/posts/${route.params.id}`).then(() => { toast.success('已删除'); router.push('/') }).catch(e => toast.error(e.message))) }
+function confirm(msg, cb) { confirmMsg.value = msg; confirmCb = cb; confirmOpen.value = true }
+function onConfirm() { if (confirmCb) confirmCb() }
+
+function getIcon(n) { const m = {'综合讨论':'💬','技术交流':'💻','军事纵横':'⚔️','历史长廊':'📜','文学艺术':'🎨','生活杂谈':'🌻'}; return m[n] || '📌' }
+function fmtDate(s) { return s ? new Date(s).toLocaleString('zh-CN') : '' }
 
 onMounted(load)
 </script>
-
-<style scoped>
-.post-meta { color: #909399; font-size: 13px; margin: 8px 0 16px; display: flex; gap: 8px; }
-.post-body { white-space: pre-wrap; line-height: 1.8; color: #303133; }
-.comment-item { padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
-.comment-item:last-child { border-bottom: none; }
-.comment-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.comment-time { color: #c0c4cc; font-size: 12px; }
-.comment-content { color: #606266; line-height: 1.5; margin: 0; }
-.comment-actions { margin-top: 6px; display: flex; gap: 4px; }
-.edit-comment-area { margin: 6px 0; }
-.user-link { color: #409eff; text-decoration: none; font-weight: 600; }
-.user-link:hover { text-decoration: underline; }
-.comment-form { margin-top: 16px; padding-top: 16px; border-top: 1px solid #f0f0f0; }
-</style>

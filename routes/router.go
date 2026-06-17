@@ -11,10 +11,15 @@ import (
 func Setup(r *gin.Engine) {
 	r.GET("/ping", func(c *gin.Context) { models.Success(c, "pong", nil) })
 
+	// 静态文件服务：上传的图片和文件
+	r.Static("/uploads/images", "./uploads/images")
+	r.Static("/uploads/files", "./uploads/files")
+
 	api := r.Group("/api")
 	{
 		api.POST("/register", controllers.Register)
 		api.POST("/login", controllers.Login)
+		api.GET("/users", controllers.SearchUsers)
 		api.GET("/users/:id", controllers.GetUserProfile)
 		api.GET("/posts", controllers.GetPosts)
 		api.GET("/posts/:id", controllers.GetPost)
@@ -25,6 +30,10 @@ func Setup(r *gin.Engine) {
 		auth := api.Group("")
 		auth.Use(middlewares.AuthRequired())
 		{
+			// 上传
+			auth.POST("/upload/image", controllers.UploadImage)
+			auth.POST("/upload/file", controllers.UploadFile)
+
 			// 发帖 / 评论（所有登录用户）
 			auth.POST("/posts", controllers.CreatePost)
 			auth.PUT("/posts/:id", controllers.UpdatePost)

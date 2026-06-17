@@ -2,7 +2,9 @@ package main
 
 import (
 	"community/config"
+	"community/data"
 	"community/routes"
+	"community/storage"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,8 +13,16 @@ func main() {
 	config.Init()
 	config.InitDB()
 
+	// 初始化文件存储（切云存储只需改这里）
+	storage.Store = data.NewLocalStorage(
+		"./uploads/images",
+		"./uploads/files",
+		"/uploads/images",
+		"/uploads/files",
+	)
+
 	r := gin.Default()
-	r.SetTrustedProxies(nil) // 本地开发，禁用代理信任检查
+	r.SetTrustedProxies(nil)
 	routes.Setup(r)
 	r.Run(":8080")
 }

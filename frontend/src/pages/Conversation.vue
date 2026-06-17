@@ -1,53 +1,68 @@
 <template>
-  <div class="conversation-page">
-    <div class="chat-header">
-      <el-button @click="$router.push('/messages')" text><el-icon><ArrowLeft /></el-icon> 返回</el-button>
-      <router-link :to="`/user/${partner.id}`" class="partner-name">{{ partner.username }}</router-link>
-      <el-button size="small" @click="showNewThread = true" style="margin-left:auto;">+ 新主题</el-button>
+  <div class="max-w-[650px] mx-auto flex flex-col" style="height: calc(100vh - 160px);">
+    <div v-if="toast.msg.value" :class="['fixed top-20 right-5 z-200 px-4 py-2 rounded-lg text-xs font-mono', toast.type.value === 'error' ? 'bg-danger/20 border border-danger/40 text-danger' : 'bg-success/20 border border-success/40 text-success']">{{ toast.msg.value }}</div>
+
+    <!-- Header -->
+    <div class="flex items-center gap-3 pb-2 border-b border-border mb-2">
+      <button @click="$router.push('/messages')" class="text-xs text-muted-fg font-mono cursor-pointer bg-transparent border-0 hover:text-primary">← 返回</button>
+      <router-link :to="`/user/${partner.id}`" class="text-base font-bold text-primary font-heading tracking-wide hover:underline">{{ partner.username }}</router-link>
+      <button @click="showNewThread = true" class="ml-auto px-3 py-1 bg-card border border-border rounded text-[11px] text-fg font-mono cursor-pointer hover:border-primary transition-all">+ 新主题</button>
     </div>
 
-    <!-- 主题选择 -->
-    <div v-if="threads.length > 0" class="thread-tabs">
-      <el-radio-group v-model="activeThread" size="small" @change="switchThread">
-        <el-radio-button v-for="t in threads" :key="t.id" :value="t.id">
-          {{ t.title }} ({{ t.message_count }})
-        </el-radio-button>
-      </el-radio-group>
-      <el-popconfirm title="删除该主题及所有消息？" @confirm="deleteThread(activeThread)">
-        <template #reference>
-          <el-button text size="small" type="danger">删除此主题</el-button>
-        </template>
-      </el-popconfirm>
+    <!-- Threads -->
+    <div v-if="threads.length > 0" class="flex items-center gap-2 mb-2 flex-wrap">
+      <button v-for="t in threads" :key="t.id" @click="switchThread(t.id)"
+        :class="['px-3 py-1 rounded text-[11px] font-mono cursor-pointer transition-all', activeThread === t.id ? 'bg-primary text-bg border border-primary' : 'bg-card text-muted-fg border border-border hover:border-primary']">
+        {{ t.title }} ({{ t.message_count }})
+      </button>
+      <button @click="confirmDelete" class="px-2 py-1 text-[10px] text-muted-fg hover:text-danger font-mono cursor-pointer bg-transparent border-0">删除</button>
     </div>
 
-    <!-- 无主题引导 -->
-    <div v-if="threads.length === 0" style="text-align:center;color:#999;padding:40px;">
-      <p>还没有对话主题</p>
-      <el-button type="primary" @click="showNewThread = true">创建第一个主题</el-button>
+    <!-- No threads -->
+    <div v-if="threads.length === 0" class="text-center text-muted-fg py-10">
+      <p class="text-sm mb-3">还没有对话主题</p>
+      <button @click="showNewThread = true" class="px-4 py-2 bg-primary text-bg rounded-md text-xs font-bold font-heading tracking-wide cursor-pointer">创建第一个主题</button>
     </div>
 
-    <!-- 消息 -->
-    <div class="chat-messages" ref="msgList" v-if="activeThread">
-      <div v-if="messages.length === 0" style="text-align:center;color:#999;padding:40px;">发送第一条消息吧~</div>
-      <div v-for="msg in messages" :key="msg.id" :class="['msg-bubble', msg.from_user_id === myID ? 'msg-mine' : 'msg-other']">
-        <div class="msg-content">{{ msg.content }}</div>
-        <div class="msg-time">{{ formatTime(msg.created_at) }}</div>
+    <!-- Messages -->
+    <div v-if="activeThread" ref="msgList" class="flex-1 overflow-y-auto py-2 space-y-3.5">
+      <div v-if="messages.length === 0" class="text-center text-muted-fg py-10 text-sm">发送第一条消息吧~</div>
+      <div v-for="msg in messages" :key="msg.id" :class="['max-w-[75%]', msg.from_user_id === myID ? 'ml-auto text-right' : '']">
+        <div :class="['inline-block px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words', msg.from_user_id === myID ? 'bg-primary text-bg' : 'bg-secondary text-fg']">{{ msg.content }}</div>
+        <div class="text-[10px] text-muted-fg font-mono mt-1 px-1">{{ fmtTime(msg.created_at) }}</div>
       </div>
     </div>
 
-    <div class="chat-input" v-if="activeThread">
-      <el-input v-model="text" placeholder="输入消息..." @keyup.enter="sendMsg" size="large">
-        <template #append><el-button @click="sendMsg">发送</el-button></template>
-      </el-input>
+    <!-- Input -->
+    <div v-if="activeThread" class="mt-3 pt-3 border-t border-border">
+      <div class="flex gap-2">
+        <input v-model="text" @keyup.enter="sendMsg" placeholder="输入消息..." class="flex-1 h-9 bg-input border border-border rounded-md px-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary transition-colors">
+        <button @click="sendMsg" class="px-4 bg-primary text-bg border-0 rounded-md text-xs font-bold font-heading tracking-wide cursor-pointer hover:brightness-110 transition-all">发送</button>
+      </div>
     </div>
 
-    <el-dialog v-model="showNewThread" title="新建对话主题" width="380px">
-      <el-input v-model="newThreadTitle" placeholder="比如：旅行计划、日常聊天..." />
-      <template #footer>
-        <el-button @click="showNewThread = false">取消</el-button>
-        <el-button type="primary" @click="createThread">创建</el-button>
-      </template>
-    </el-dialog>
+    <!-- New Thread Dialog -->
+    <div v-if="showNewThread" class="fixed inset-0 z-500 flex items-center justify-center bg-black/50" @click.self="showNewThread = false">
+      <div class="bg-card border border-border rounded-lg p-6 max-w-[380px] w-full mx-4">
+        <h3 class="text-sm font-bold text-fg font-heading tracking-wide mb-3">新建对话主题</h3>
+        <input v-model="newThreadTitle" placeholder="比如：旅行计划、日常聊天..." class="w-full h-9 bg-input border border-border rounded-md px-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary mb-4">
+        <div class="flex justify-end gap-2">
+          <button @click="showNewThread = false" class="px-4 py-1.5 bg-card border border-border rounded text-xs text-muted-fg font-mono cursor-pointer">取消</button>
+          <button @click="createThread" class="px-4 py-1.5 bg-primary text-bg rounded text-xs font-bold font-heading tracking-wide cursor-pointer">创建</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete confirm -->
+    <div v-if="deleteOpen" class="fixed inset-0 z-500 flex items-center justify-center bg-black/50" @click.self="deleteOpen = false">
+      <div class="bg-card border border-border rounded-lg p-6 max-w-[360px] w-full mx-4">
+        <p class="text-sm text-fg mb-4">删除该主题及所有消息？</p>
+        <div class="flex justify-end gap-2">
+          <button @click="deleteOpen = false" class="px-4 py-1.5 bg-card border border-border rounded text-xs text-muted-fg font-mono cursor-pointer">取消</button>
+          <button @click="doDelete" class="px-4 py-1.5 bg-danger text-white rounded text-xs font-bold font-heading tracking-wide cursor-pointer">确定</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -56,93 +71,50 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../stores/auth'
 import api from '../api'
-import { ElMessage } from 'element-plus'
+import { useToast } from '../composables/toast'
 
-const route = useRoute()
-const auth = useAuth()
+const route = useRoute(); const auth = useAuth(); const toast = useToast()
 const myID = computed(() => auth.user?.id)
-const partner = ref({})
-const threads = ref([])
-const activeThread = ref(0)
-const messages = ref([])
-const text = ref('')
-const msgList = ref(null)
-const showNewThread = ref(false)
-const newThreadTitle = ref('')
+const partner = ref({}); const threads = ref([]); const activeThread = ref(0)
+const messages = ref([]); const text = ref(''); const msgList = ref(null)
+const showNewThread = ref(false); const newThreadTitle = ref('')
+const deleteOpen = ref(false)
 
 async function loadThreads() {
-  const res = await api.get('/threads', { params: { with: route.params.id } })
-  threads.value = res.data.data.threads
-  if (threads.value.length > 0 && !activeThread.value) {
-    activeThread.value = threads.value[0].id
-  }
+  const r = await api.get('/threads', { params: { with: route.params.id } })
+  threads.value = r.data.data.threads
+  if (threads.value.length && !activeThread.value) activeThread.value = threads.value[0].id
   if (activeThread.value) await loadMessages()
 }
-
 async function loadMessages() {
-  const res = await api.get(`/messages/${route.params.id}`, { params: { thread: activeThread.value } })
-  partner.value = res.data.data.partner
-  messages.value = res.data.data.messages
-  await api.put(`/messages/${route.params.id}/read`)
-  scrollToBottom()
+  const r = await api.get(`/messages/${route.params.id}`, { params: { thread: activeThread.value } })
+  partner.value = r.data.data.partner; messages.value = r.data.data.messages
+  api.put(`/messages/${route.params.id}/read`).catch(() => {})
+  nextTick(() => { if(msgList.value) msgList.value.scrollTop = msgList.value.scrollHeight })
 }
-
-async function switchThread() { await loadMessages() }
-
+async function switchThread(tid) { activeThread.value = tid; await loadMessages() }
 function sendMsg() {
   if (!text.value.trim()) return
   api.post('/messages', { to_user_id: Number(route.params.id), thread_id: activeThread.value, content: text.value })
-    .then(() => { text.value = ''; loadMessages() })
-    .catch(e => ElMessage.error(e.message))
+    .then(() => { text.value = ''; loadMessages() }).catch(e => toast.error(e.message))
 }
-
 function createThread() {
   if (!newThreadTitle.value.trim()) return
   api.post('/threads', { with_user_id: Number(route.params.id), title: newThreadTitle.value })
-    .then(res => {
-      showNewThread.value = false
-      newThreadTitle.value = ''
-      const tid = res.data.data.thread.id
-      return api.get('/threads', { params: { with: route.params.id } })
-    })
-    .then(res => {
-      threads.value = res.data.data.threads
-      activeThread.value = threads.value[threads.value.length - 1].id
-      return loadMessages()
-    })
-    .catch(e => ElMessage.error(e.message))
+    .then(res => { showNewThread.value = false; newThreadTitle.value = ''; return api.get('/threads', { params: { with: route.params.id } }) })
+    .then(res => { threads.value = res.data.data.threads; activeThread.value = threads.value[threads.value.length - 1].id; return loadMessages() })
+    .catch(e => toast.error(e.message))
 }
-
-function deleteThread(id) {
-  api.delete(`/threads/${id}`)
-    .then(() => {
-      threads.value = threads.value.filter(t => t.id !== id)
-      if (activeThread.value === id) {
-        activeThread.value = threads.value.length > 0 ? threads.value[0].id : 0
-      }
-      if (activeThread.value) loadMessages()
-      ElMessage.success('已删除')
-    })
-    .catch(e => ElMessage.error(e.message))
+function confirmDelete() { deleteOpen.value = true }
+function doDelete() {
+  api.delete(`/threads/${activeThread.value}`).then(() => {
+    threads.value = threads.value.filter(t => t.id !== activeThread.value)
+    activeThread.value = threads.value.length ? threads.value[0].id : 0
+    deleteOpen.value = false
+    if (activeThread.value) loadMessages(); else messages.value = []
+    toast.success('已删除')
+  }).catch(e => toast.error(e.message))
 }
-
-function scrollToBottom() { nextTick(() => { if (msgList.value) msgList.value.scrollTop = msgList.value.scrollHeight }) }
-function formatTime(s) { return s ? new Date(s).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '' }
-
+function fmtTime(s) { return s ? new Date(s).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '' }
 onMounted(loadThreads)
 </script>
-
-<style scoped>
-.conversation-page { max-width: 650px; margin: 0 auto; display: flex; flex-direction: column; height: calc(100vh - 140px); }
-.chat-header { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid #eee; margin-bottom: 8px; }
-.partner-name { font-size: 16px; font-weight: 600; color: #409eff; text-decoration: none; }
-.thread-tabs { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-.chat-messages { flex: 1; overflow-y: auto; padding: 8px 0; }
-.msg-bubble { margin-bottom: 14px; max-width: 75%; }
-.msg-mine { margin-left: auto; text-align: right; }
-.msg-mine .msg-content { background: #409eff; color: #fff; }
-.msg-other .msg-content { background: #f0f0f0; color: #303133; }
-.msg-content { display: inline-block; padding: 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.5; word-break: break-word; white-space: pre-wrap; }
-.msg-time { font-size: 11px; color: #c0c4cc; margin-top: 4px; }
-.chat-input { margin-top: 12px; padding-top: 12px; border-top: 1px solid #eee; }
-</style>

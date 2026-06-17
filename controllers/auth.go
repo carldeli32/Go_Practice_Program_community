@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"community/data"
 	"community/models"
 	"community/service"
 
@@ -122,4 +123,27 @@ func GetUserProfile(c *gin.Context) {
 		},
 		"posts": result.Posts,
 	})
+}
+
+// ========== 搜索用户 ==========
+// GET /api/users?q=xxx
+func SearchUsers(c *gin.Context) {
+	q := c.Query("q")
+	users, err := data.ListUsers(q)
+	if err != nil {
+		models.Error(c, http.StatusInternalServerError, "查询失败")
+		return
+	}
+
+	type userItem struct {
+		ID       uint   `json:"id"`
+		Username string `json:"username"`
+		Motto    string `json:"motto"`
+	}
+	items := make([]userItem, len(users))
+	for i, u := range users {
+		items[i] = userItem{u.ID, u.Username, u.Motto}
+	}
+
+	models.Success(c, "获取成功", gin.H{"users": items})
 }

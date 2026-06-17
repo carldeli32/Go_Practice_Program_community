@@ -1,16 +1,13 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
   server: {
     port: 3000,
     proxy: {
-      // 把所有 /api 请求转发到 Go 后端 :8080
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      }
+      '/api': { target: 'http://localhost:8080', changeOrigin: true }
     }
   }
 })
