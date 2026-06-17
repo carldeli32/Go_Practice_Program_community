@@ -1,4 +1,4 @@
-name: Basic_CI
+name: general_CI
 
 on:
   push:
@@ -13,8 +13,7 @@ on:
 jobs:
 
   # ═══════════════════════════════════════════════
-  # 阶段一：并行编译
-  #   backend-build + frontend-build 同时跑
+  # 阶段一：编译（并行）
   # ═══════════════════════════════════════════════
 
   backend-build:
@@ -40,7 +39,6 @@ jobs:
 
   # ═══════════════════════════════════════════════
   # 阶段二：静态分析
-  #   等 backend-build 和 frontend-build 都通过才跑
   # ═══════════════════════════════════════════════
 
   backend-vet:
@@ -54,20 +52,66 @@ jobs:
       - run: go vet ./...
 
   # ═══════════════════════════════════════════════
-  # 阶段三：汇总通知（无论成败都跑）
-  #   always() = 前面 job 挂了也照样执行
+  # 阶段三：service 层单元测试
+  #   条件：① 编译 + vet 全过 ② 改了 service/data/models
   # ═══════════════════════════════════════════════
 
-  notify:
-    needs: [backend-build, frontend-build, backend-vet]
-    if: always()
+  service-test:
+    needs: backend-vet
     runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test123
+          MYSQL_DATABASE: community_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
     steps:
-      - name: 汇总结果
+      - uses: actions/checkout@v4
+
+      - name: 检查 service 层是否有变更
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            service:
+              - 'service/**'
+              - 'data/**'
+              - 'models/**'
+              - 'go.mod'
+              - 'go.sum'
+
+      - uses: actions/setup-go@v5
+        if: steps.filter.outputs.service == 'true'
+        with:
+          go-version: '1.23'
+
+      - name: 等待 MySQL 就绪
+        if: steps.filter.outputs.service == 'true'
         run: |
-          echo "=========================================="
-          echo "  community_ci 执行完毕"
-          echo "  backend-build   : ${{ needs.backend-build.result }}"
-          echo "  frontend-build  : ${{ needs.frontend-build.result }}"
-          echo "  backend-vet     : ${{ needs.backend-vet.result }}"
-          echo "=========================================="
+          for i in $(seq 1 30); do
+            if mysqladmin ping -h 127.0.0.1 -u root -ptest123 --silent; then
+              echo "MySQL 已就绪"
+              break
+            fi
+            echo "等待 MySQL... $i/30"
+            sleep 2
+          done
+
+      - name: 运行 service 单元测试
+        if: steps.filter.outputs.service == 'true'
+        run: go test ./service/ -v -cover -count=1
+        env:
+          DB_DSN: root:test123@tcp(127.0.0.1:3306)/community_test?charset=utf8mb4&parseTime=True
+
+      - name: 跳过（无 service 变更）
+        if: steps.filter.outputs.service != 'true'
+        run: echo "⏭️ 本次提交未修改 service/data/models，跳过测试"
