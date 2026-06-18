@@ -11,7 +11,7 @@
 
       <input v-model="form.title" placeholder="标题" maxlength="200" class="w-full h-10 bg-input border border-border rounded-md px-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary transition-colors" />
 
-      <textarea v-model="form.content" rows="10" placeholder="写下你的想法..." class="w-full bg-input border border-border rounded-md p-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary transition-colors resize-none"></textarea>
+      <Editor v-model="form.content" :post-id="postId" placeholder="分享你的想法，支持拖入或粘贴图片..." />
 
       <button @click="handleSubmit" :disabled="submitting" class="w-full h-10 bg-primary text-bg border-0 rounded-md text-sm font-bold font-heading tracking-wider cursor-pointer hover:brightness-110 transition-all disabled:opacity-50">
         {{ submitting ? '提交中...' : (isEdit ? '保存修改' : '发布帖子') }}
@@ -21,16 +21,22 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useToast } from '../composables/toast'
+import Editor from '../components/Editor.vue'
+import TurndownService from 'turndown'
+
+const turndown = new TurndownService({ headingStyle: 'atx' })
 
 const route = useRoute(); const router = useRouter()
 const submitting = ref(false); const categories = ref([])
 const form = reactive({ title: '', content: '', category_id: null })
 const isEdit = computed(() => !!route.query.edit)
 const toast = useToast()
+const postId = ref(0)
+const published = ref(false)
 
 function getIcon(n) { const m = {'综合讨论':'💬','技术交流':'💻','军事纵横':'⚔️','历史长廊':'📜','文学艺术':'🎨','生活杂谈':'🌻'}; return m[n] || '📌' }
 
@@ -43,21 +49,44 @@ onMounted(async () => {
 
   if (isEdit.value) {
     api.get(`/posts/${route.query.edit}`).then(r => {
-      form.title = r.data.data.post.title
-      form.content = r.data.data.post.content
-      form.category_id = r.data.data.post.category_id
+      const p = r.data.data.post
+      postId.value = p.id
+      form.title = p.title
+      form.content = p.content
+      form.category_id = p.category_id
     }).catch(() => { toast.error('无法加载帖子'); router.push('/') })
+  } else {
+    // 创建草稿帖子，拿到 ID
+    try {
+      const cid = route.query.category_id || 1
+      const r = await api.post('/posts', { title: '', content: '', category_id: Number(cid), status: 'draft' })
+      postId.value = r.data.data.post.id
+    } catch (e) { toast.error('初始化失败') }
+  }
+})
+
+// 离开页面时如果没发布就删草稿
+onBeforeUnmount(() => {
+  if (!isEdit.value && !published.value && postId.value) {
+    api.delete(`/posts/${postId.value}`).catch(() => {})
   }
 })
 
 function handleSubmit() {
   if (!form.title.trim() || !form.content.trim()) { toast.warning('请填写标题和内容'); return }
   submitting.value = true
-  const payload = { title: form.title, content: form.content, category_id: form.category_id }
-  const req = isEdit.value ? api.put(`/posts/${route.query.edit}`, payload) : api.post('/posts', payload)
-  req.then(res => {
-    toast.success(isEdit.value ? '更新成功' : '发布成功')
-    router.push(isEdit.value ? `/post/${route.query.edit}` : `/post/${res.data.data.post.id}`)
-  }).catch(e => toast.error(e.message)).finally(() => submitting.value = false)
+  const md = turndown.turndown(form.content)
+  const payload = { title: form.title, content: md, category_id: form.category_id }
+
+  if (isEdit.value) {
+    api.put(`/posts/${route.query.edit}`, payload)
+      .then(() => { published.value = true; toast.success('更新成功'); router.push(`/post/${route.query.edit}`) })
+      .catch(e => toast.error(e.message)).finally(() => submitting.value = false)
+  } else {
+    // 更新草稿为正式帖子
+    api.put(`/posts/${postId.value}`, { ...payload, status: 'published' })
+      .then(() => { published.value = true; toast.success('发布成功'); router.push(`/post/${postId.value}`) })
+      .catch(e => toast.error(e.message)).finally(() => submitting.value = false)
+  }
 }
 </script>

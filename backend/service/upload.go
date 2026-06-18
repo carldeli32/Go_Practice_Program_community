@@ -30,7 +30,7 @@ var allowedImageTypes = map[string]bool{
 // ─── 上传图片 ───
 
 // UploadImage 校验 + 保存图片，返回公开 URL
-func UploadImage(fileHeader *multipart.FileHeader) (string, error) {
+func UploadImage(postID uint, fileHeader *multipart.FileHeader) (string, error) {
 	if fileHeader.Size > MaxImageSize {
 		return "", &AppError{Code: http.StatusBadRequest, Message: "图片不能超过 5MB"}
 	}
@@ -63,13 +63,13 @@ func UploadImage(fileHeader *multipart.FileHeader) (string, error) {
 	}
 	filename := uuid.New().String() + ext
 
-	return storage.Store.SaveImage(filename, file)
+	return storage.Store.SaveImage(postID, filename, file)
 }
 
 // ─── 上传文件 ───
 
 // UploadFile 校验 + 保存普通文件
-func UploadFile(fileHeader *multipart.FileHeader) (string, error) {
+func UploadFile(postID uint, fileHeader *multipart.FileHeader) (string, error) {
 	if fileHeader.Size > MaxFileSize {
 		return "", &AppError{Code: http.StatusBadRequest, Message: "文件不能超过 20MB"}
 	}
@@ -84,7 +84,7 @@ func UploadFile(fileHeader *multipart.FileHeader) (string, error) {
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	safeName := uuid.New().String() + ext
 
-	return storage.Store.SaveFile(safeName, file)
+	return storage.Store.SaveFile(postID, safeName, file)
 }
 
 // ─── 魔数检测 ───

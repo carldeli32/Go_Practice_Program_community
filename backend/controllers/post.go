@@ -14,9 +14,10 @@ import (
 // ─── 创建帖子 ───
 func CreatePost(c *gin.Context) {
 	var req struct {
-		Title      string `json:"title" binding:"required,min=1,max=200"`
-		Content    string `json:"content" binding:"required,min=1"`
+		Title      string `json:"title"`
+		Content    string `json:"content"`
 		CategoryID *uint  `json:"category_id"`
+		Status     string `json:"status"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		models.Error(c, http.StatusBadRequest, "参数错误: "+err.Error())
@@ -29,7 +30,11 @@ func CreatePost(c *gin.Context) {
 	}
 
 	userID := c.GetUint("user_id")
-	post, err := service.CreatePost(userID, req.Title, req.Content, categoryID)
+	status := req.Status
+	if status == "" {
+		status = "published"
+	}
+	post, err := service.CreatePost(userID, req.Title, req.Content, categoryID, status)
 	if err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)

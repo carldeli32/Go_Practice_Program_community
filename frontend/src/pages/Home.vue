@@ -68,7 +68,7 @@
           </div>
         </div>
         <h3 class="text-[15px] font-semibold text-fg font-heading tracking-wide mb-1.5 group-hover:text-primary transition-colors">{{ post.title }}</h3>
-        <p class="text-xs text-muted-fg leading-relaxed line-clamp-2">{{ truncate(post.content, 200) }}</p>
+        <p class="text-xs text-muted-fg leading-relaxed line-clamp-2" v-html="previewMD(post.content)" />
       </article>
 
       <!-- Pagination -->
@@ -144,6 +144,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '../stores/auth'
 import api from '../api'
 import { Search } from 'lucide-vue-next'
+import { marked } from 'marked'
+
+marked.setOptions({ breaks: true, gfm: true })
 
 const route = useRoute(); const router = useRouter(); const auth = useAuth()
 const categories = ref([]); const posts = ref([]); const hotPosts = ref([])
@@ -197,6 +200,12 @@ function getIcon(n) { const m = { '综合讨论':'💬','技术交流':'💻','�
 function avatarColor(n) { const c = ['#00c8ff','#7c3aed','#00ff94','#ff6b35','#f72585','#ffd60a']; let h = 0; for (let ch of (n || '?')) h = ch.charCodeAt(0) + ((h << 5) - h); return c[Math.abs(h) % c.length] }
 function fmtTime(s) { if (!s) return ''; const d = new Date(s), n = new Date(), diff = n - d; if (diff < 6e4) return '刚刚'; if (diff < 36e5) return Math.floor(diff/6e4)+'分钟前'; if (diff < 864e5) return Math.floor(diff/36e5)+'小时前'; return d.toLocaleString('zh-CN') }
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : s }
+function previewMD(text) {
+  if (!text) return ''
+  const html = marked.parse(text)
+  // Strip all HTML tags for plain text preview
+  return html.replace(/<[^>]*>/g, '').slice(0, 200)
+}
 
 watch(() => route.query.category_id, (v) => { if (v) { const c = categories.value.find(x => x.id === Number(v)); if (c) { activeCategory.value = c; fetchPosts() } } else activeCategory.value = null })
 watch(userSearch, () => {

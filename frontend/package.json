@@ -10,10 +10,15 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.1",
+    "@tiptap/extension-image": "^3.27.0",
+    "@tiptap/starter-kit": "^3.27.0",
+    "@tiptap/vue-3": "^3.27.0",
     "axios": "^1.16.1",
     "lucide-vue-next": "^1.0.0",
+    "marked": "^18.0.5",
     "reka-ui": "^2.9.10",
     "tailwindcss": "^4.3.1",
+    "turndown": "^7.2.4",
     "vue": "^3.5.34",
     "vue-router": "^4.6.4"
   },

@@ -3,14 +3,30 @@ package service
 import (
 	"community/backend/data"
 	"community/backend/models"
+	"community/backend/storage"
+	"regexp"
 	"time"
 )
+
+// mdImageRegex 匹配 Markdown 图片语法 ![](url)
+var mdImageRegex = regexp.MustCompile(`!\[.*?\]\((/uploads/images/[^)]+)\)`)
+
+// extractUploadURLs 从 Markdown 内容中提取所有上传文件 URL
+func extractUploadURLs(content string) []string {
+	matches := mdImageRegex.FindAllStringSubmatch(content, -1)
+	urls := make([]string, 0, len(matches))
+	for _, m := range matches {
+		if len(m) > 1 {
+			urls = append(urls, m[1])
+		}
+	}
+	return urls
+}
 
 // ─── 发帖 ───
 
 // CreatePost 禁言检查 → 创建帖子
-func CreatePost(userID uint, title, content string, categoryID uint) (*models.Post, error) {
-	// 禁言检查
+func CreatePost(userID uint, title, content string, categoryID uint, status string) (*models.Post, error) {
 	if err := checkMuted(userID, categoryID); err != nil {
 		return nil, err
 	}
@@ -18,6 +34,7 @@ func CreatePost(userID uint, title, content string, categoryID uint) (*models.Po
 	post := &models.Post{
 		Title:      title,
 		Content:    content,
+		Status:     status,
 		UserID:     userID,
 		CategoryID: categoryID,
 	}
@@ -29,7 +46,6 @@ func CreatePost(userID uint, title, content string, categoryID uint) (*models.Po
 
 // ─── 编辑 ───
 
-// UpdatePost 查帖子 → 权限检查 → 更新
 func UpdatePost(postID, userID uint, title, content string, roles []string) (*models.Post, error) {
 	post, err := data.FindPostByIDRaw(postID)
 	if err != nil {
@@ -54,13 +70,12 @@ func UpdatePost(postID, userID uint, title, content string, roles []string) (*mo
 	if err := data.UpdatePost(postID, updates); err != nil {
 		return nil, ErrDBOpFail
 	}
-	// 重新查询以返回完整数据
 	return data.FindPostByID(postID)
 }
 
 // ─── 删除 ───
 
-// DeletePost 查帖子 → 权限检查 → 删评论 → 删帖子
+// DeletePost 查帖子 → 权限检查 → 收集上传文件 → 删评论 → 删帖子 → 清理文件
 func DeletePost(postID, userID uint, roles []string) error {
 	post, err := data.FindPostByIDRaw(postID)
 	if err != nil {
@@ -71,14 +86,30 @@ func DeletePost(postID, userID uint, roles []string) error {
 		return ErrForbidden
 	}
 
+	// 收集需要清理的上传文件
+	var urlsToDelete []string
+	urlsToDelete = append(urlsToDelete, extractUploadURLs(post.Content)...)
+
+	comments, _ := data.ListCommentsByPost(postID)
+	for _, c := range comments {
+		urlsToDelete = append(urlsToDelete, extractUploadURLs(c.Content)...)
+	}
+
+	// 删数据库
 	_ = data.DeleteCommentsByPost(postID)
 	_ = data.DeletePost(postID)
+
+	// 清磁盘
+	for _, url := range urlsToDelete {
+		storage.Store.DeleteImage(url)
+	}
+	storage.Store.DeletePostDir(postID)
+
 	return nil
 }
 
 // ─── 权限判断 ───
 
-// CanManagePost 作者本人 or 具有 manage_any 权限 or 管辖区版内
 func CanManagePost(userID uint, roles []string, post *models.Post) bool {
 	if post.UserID == userID {
 		return true
@@ -96,18 +127,20 @@ func CanManagePost(userID uint, roles []string, post *models.Post) bool {
 // ─── 禁言检查 ───
 
 func checkMuted(userID, categoryID uint) *AppError {
-	now := time.Now().Format("2006-01-02 15:04")
-
 	mute, err := data.FindActiveMute(userID, categoryID)
 	if err != nil {
-		return nil // 无有效禁言
+		return nil
 	}
 
 	until := mute.MutedUntil.Format("2006-01-02 15:04")
-	_ = now
+	_ = now()
 
 	if mute.CategoryID == 0 {
 		return ErrMuted(until)
 	}
 	return ErrMutedCategory(until)
+}
+
+func now() string {
+	return time.Now().Format("2006-01-02 15:04")
 }

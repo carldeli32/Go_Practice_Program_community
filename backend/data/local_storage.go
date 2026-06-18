@@ -5,22 +5,20 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"community/backend/storage"
 )
 
-// 编译期检查：确保 LocalStorage 实现了 storage.Storage
 var _ storage.Storage = (*LocalStorage)(nil)
 
-// LocalStorage 将图片和文件分别存到不同目录
 type LocalStorage struct {
-	ImageBasePath string // 如 "./uploads/images"
-	FileBasePath  string // 如 "./uploads/files"
-	ImageBaseURL  string // 如 "/uploads/images"
-	FileBaseURL   string // 如 "/uploads/files"
+	ImageBasePath string
+	FileBasePath  string
+	ImageBaseURL  string
+	FileBaseURL   string
 }
 
-// NewLocalStorage 创建本地存储实例
 func NewLocalStorage(imagePath, filePath, imageURL, fileURL string) *LocalStorage {
 	return &LocalStorage{
 		ImageBasePath: imagePath,
@@ -30,30 +28,24 @@ func NewLocalStorage(imagePath, filePath, imageURL, fileURL string) *LocalStorag
 	}
 }
 
-func (s *LocalStorage) SaveImage(filename string, reader io.Reader) (string, error) {
-	return s.save(s.ImageBasePath, s.ImageBaseURL, filename, reader)
+// ─── 保存到帖子目录 ───
+
+func (s *LocalStorage) SaveImage(postID uint, filename string, reader io.Reader) (string, error) {
+	return s.saveForPost(s.ImageBasePath, s.ImageBaseURL, postID, filename, reader)
 }
 
-func (s *LocalStorage) SaveFile(filename string, reader io.Reader) (string, error) {
-	return s.save(s.FileBasePath, s.FileBaseURL, filename, reader)
+func (s *LocalStorage) SaveFile(postID uint, filename string, reader io.Reader) (string, error) {
+	return s.saveForPost(s.FileBasePath, s.FileBaseURL, postID, filename, reader)
 }
 
-func (s *LocalStorage) DeleteImage(path string) error {
-	return s.deleteFile(s.ImageBasePath, path)
-}
-
-func (s *LocalStorage) DeleteFile(path string) error {
-	return s.deleteFile(s.FileBasePath, path)
-}
-
-// ─── 内部实现 ───
-
-func (s *LocalStorage) save(basePath, baseURL, filename string, reader io.Reader) (string, error) {
-	if err := os.MkdirAll(basePath, 0755); err != nil {
+func (s *LocalStorage) saveForPost(basePath, baseURL string, postID uint, filename string, reader io.Reader) (string, error) {
+	subDir := strconv.FormatUint(uint64(postID), 10)
+	fullDir := filepath.Join(basePath, subDir)
+	if err := os.MkdirAll(fullDir, 0755); err != nil {
 		return "", fmt.Errorf("创建存储目录失败: %w", err)
 	}
 
-	fullPath := filepath.Join(basePath, filename)
+	fullPath := filepath.Join(fullDir, filename)
 	f, err := os.Create(fullPath)
 	if err != nil {
 		return "", fmt.Errorf("创建文件失败: %w", err)
@@ -65,11 +57,33 @@ func (s *LocalStorage) save(basePath, baseURL, filename string, reader io.Reader
 		return "", fmt.Errorf("写入文件失败: %w", err)
 	}
 
-	return baseURL + "/" + filename, nil
+	return filepath.Join(baseURL, subDir, filename), nil
 }
 
-func (s *LocalStorage) deleteFile(basePath, path string) error {
-	filename := filepath.Base(path)
-	fullPath := filepath.Join(basePath, filename)
+// ─── 删除 ───
+
+func (s *LocalStorage) DeleteImage(urlPath string) error {
+	return s.deleteByURL(s.ImageBasePath, s.ImageBaseURL, urlPath)
+}
+
+func (s *LocalStorage) DeleteFile(urlPath string) error {
+	return s.deleteByURL(s.FileBasePath, s.FileBaseURL, urlPath)
+}
+
+func (s *LocalStorage) deleteByURL(basePath, baseURL, urlPath string) error {
+	rel := urlPath
+	if len(urlPath) > len(baseURL) && urlPath[:len(baseURL)] == baseURL {
+		rel = urlPath[len(baseURL)+1:]
+	}
+	fullPath := filepath.Join(basePath, rel)
 	return os.Remove(fullPath)
+}
+
+// ─── 帖子目录管理 ───
+
+func (s *LocalStorage) DeletePostDir(postID uint) error {
+	cid := strconv.FormatUint(uint64(postID), 10)
+	_ = os.RemoveAll(filepath.Join(s.ImageBasePath, cid))
+	_ = os.RemoveAll(filepath.Join(s.FileBasePath, cid))
+	return nil
 }
