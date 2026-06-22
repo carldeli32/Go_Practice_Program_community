@@ -15,20 +15,23 @@ jobs:
   backend-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.23'
+          cache-dependency-path: backend/go.sum
       - run: go build ./...
         working-directory: backend
 
   frontend-build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
       - run: npm run build
@@ -38,10 +41,11 @@ jobs:
     needs: [backend-build, frontend-build]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.23'
+          cache-dependency-path: backend/go.sum
       - run: go vet ./...
         working-directory: backend
 
@@ -64,7 +68,7 @@ jobs:
           --health-retries=5
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: 检查 service 层是否有变更
         id: filter
@@ -78,10 +82,11 @@ jobs:
               - 'backend/go.mod'
               - 'backend/go.sum'
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         if: steps.filter.outputs.service == 'true'
         with:
           go-version: '1.23'
+          cache-dependency-path: backend/go.sum
 
       - name: 等待 MySQL 就绪
         if: steps.filter.outputs.service == 'true'
