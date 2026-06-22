@@ -15,14 +15,14 @@ func main() {
 
 	// 初始化文件存储（切云存储只需改这里）
 	storage.Store = data.NewLocalStorage(
-		"../uploads/images",
-		"../uploads/files",
-		"/uploads/images",
-		"/uploads/files",
+		config.UploadImgDir(),
+		config.UploadFileDir(),
+		config.ServeImgPrefix(),
+		config.ServeFilePrefix(),
 	)
 
 	r := gin.Default()
 	r.SetTrustedProxies(nil)
 	routes.Setup(r)
-	r.Run(":8080")
+	r.Run(config.ServerPort())
 }

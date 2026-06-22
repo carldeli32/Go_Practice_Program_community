@@ -55,7 +55,7 @@ func GetComments(c *gin.Context) {
 		if len(parts) == 2 && parts[0] == "Bearer" {
 			claims := &middlewares.Claims{}
 			token, err := jwt.ParseWithClaims(parts[1], claims, func(t *jwt.Token) (interface{}, error) {
-				return middlewares.JWTSecret, nil
+				return middlewares.JWTKey(), nil
 			})
 			if err == nil && token.Valid {
 				currentUserID = claims.UserID

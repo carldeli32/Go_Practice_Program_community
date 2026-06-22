@@ -12,14 +12,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-// JWTSecret 签名密钥（生产环境应该放环境变量）
-var JWTSecret = []byte("community-secret-key-2024")
-
 // Claims 自定义 JWT 载荷
 type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
 	jwt.RegisteredClaims
+}
+
+// JWTKey 返回 JWT 签名密钥（从环境变量加载）
+func JWTKey() []byte {
+	return config.JWTKey()
 }
 
 // GenerateToken 生成 JWT Token，有效期 7 天
@@ -33,7 +35,7 @@ func GenerateToken(userID uint, username string) (string, error) {
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(JWTSecret)
+	return token.SignedString(JWTKey())
 }
 
 // AuthRequired JWT 鉴权中间件（加载角色 + 封禁检查）
@@ -56,7 +58,7 @@ func AuthRequired() gin.HandlerFunc {
 		tokenString := parts[1]
 		claims := &Claims{}
 		token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-			return JWTSecret, nil
+			return JWTKey(), nil
 		})
 
 		if err != nil || !token.Valid {

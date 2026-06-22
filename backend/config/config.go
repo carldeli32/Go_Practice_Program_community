@@ -12,15 +12,14 @@ import (
 
 var DB *gorm.DB
 
-const dsn = "root:Asd12714052458!@tcp(127.0.0.1:3306)/community?charset=utf8mb4&parseTime=True"
-
 func Init() {
+	LoadEnv()
 	fmt.Println("🚀 配置加载完成")
 }
 
 func InitDB() {
 	var err error
-	DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	DB, err = gorm.Open(mysql.Open(DSN()), &gorm.Config{})
 	if err != nil {
 		panic("❌ 数据库连接失败: " + err.Error())
 	}
