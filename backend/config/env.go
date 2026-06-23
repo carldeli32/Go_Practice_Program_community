@@ -3,19 +3,24 @@ package config
 import (
 	"log"
 	"os"
+	"strings"
+
+	"community/backend/models"
 
 	"github.com/joho/godotenv"
 )
 
 // 环境变量键名常量
 const (
-	EnvDBDSN      = "DB_DSN"
-	EnvJWTSecret  = "JWT_SECRET"
-	EnvPort       = "PORT"
-	EnvUploadImg  = "UPLOAD_IMG_DIR"
-	EnvUploadFile = "UPLOAD_FILE_DIR"
-	EnvServeImg   = "SERVE_IMG_PREFIX"
-	EnvServeFile  = "SERVE_FILE_PREFIX"
+	EnvDBDSN             = "DB_DSN"
+	EnvJWTSecret         = "JWT_SECRET"
+	EnvPort              = "PORT"
+	EnvUploadImg         = "UPLOAD_IMG_DIR"
+	EnvUploadFile        = "UPLOAD_FILE_DIR"
+	EnvServeImg          = "SERVE_IMG_PREFIX"
+	EnvServeFile         = "SERVE_FILE_PREFIX"
+	EnvRootPassword      = "ROOT_PASSWORD"
+	EnvRootPasswordFile  = "ROOT_PASSWORD_FILE"
 )
 
 // LoadEnv 加载 .env 文件
@@ -72,4 +77,35 @@ func ServeImgPrefix() string {
 // ServeFilePrefix 返回文件访问 URL 前缀
 func ServeFilePrefix() string {
 	return GetEnv(EnvServeFile, "/uploads/files")
+}
+
+// RootPassword 获取 root 初始密码（仅首次部署需要）
+// 优先级：ROOT_PASSWORD_FILE > ROOT_PASSWORD
+// 非首次部署（root 用户已存在）返回空字符串
+func RootPassword() string {
+	// 1. 文件优先（Docker secrets / K8s secrets）
+	if file := os.Getenv(EnvRootPasswordFile); file != "" {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			panic("无法读取 " + EnvRootPasswordFile + ": " + err.Error())
+		}
+		return strings.TrimSpace(string(data))
+	}
+
+	// 2. 直接环境变量
+	if pw := os.Getenv(EnvRootPassword); pw != "" {
+		return pw
+	}
+
+	// 3. 非首次部署（root 用户已存在）不需要密码
+	if DB != nil {
+		var count int64
+		DB.Model(&models.User{}).Where("username = ?", "root").Count(&count)
+		if count > 0 {
+			return ""
+		}
+	}
+
+	// 4. 首次部署但没设密码
+	panic("首次部署需要设置 ROOT_PASSWORD 或 ROOT_PASSWORD_FILE 环境变量")
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 
 	"community/backend/models"
 
@@ -84,7 +85,19 @@ func seedRootUser() {
 		return
 	}
 
-	hashed, _ := bcrypt.GenerateFromPassword([]byte("iamking"), bcrypt.DefaultCost)
+	password := RootPassword()
+	if password == "" {
+		panic("首次部署需要设置 ROOT_PASSWORD 或 ROOT_PASSWORD_FILE 环境变量")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		panic("root 密码加密失败: " + err.Error())
+	}
+
+	// 用完立即从环境变量中擦除
+	os.Unsetenv(EnvRootPassword)
+
 	user := models.User{
 		Username: "root",
 		Password: string(hashed),
