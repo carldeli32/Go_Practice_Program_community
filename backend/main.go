@@ -14,6 +14,7 @@ import (
 	"community/backend/config"
 	"community/backend/data"
 	"community/backend/routes"
+	"community/backend/sse"
 	"community/backend/storage"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,9 @@ import (
 func main() {
 	config.Init()
 	config.InitDB()
+
+	// SSE 实时推送中心
+	sse.DefaultHub = sse.NewHub()
 
 	// 初始化文件存储（切云存储只需改这里）
 	storage.Store = data.NewLocalStorage(

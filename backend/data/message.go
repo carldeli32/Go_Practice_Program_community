@@ -125,3 +125,10 @@ func MarkReadFrom(fromUserID, toUserID uint) error {
 		Where("from_user_id = ? AND to_user_id = ? AND is_read = false", fromUserID, toUserID).
 		Update("is_read", true).Error
 }
+
+// RecallMessage 撤回消息（仅发送者，标记 is_recalled）
+func RecallMessage(msgID, userID uint) error {
+	return config.DB.Model(&models.Message{}).
+		Where("id = ? AND from_user_id = ?", msgID, userID).
+		Update("is_recalled", true).Error
+}

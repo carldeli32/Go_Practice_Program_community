@@ -11,5 +11,6 @@ type Message struct {
 	ToUser     User      `gorm:"foreignKey:ToUserID" json:"to_user,omitempty"`
 	Content    string    `gorm:"type:text;not null" json:"content"`
 	IsRead     bool      `gorm:"default:false" json:"is_read"`
+	IsRecalled bool      `gorm:"default:false" json:"is_recalled"`
 	CreatedAt  time.Time `json:"created_at"`
 }

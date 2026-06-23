@@ -5,7 +5,7 @@
     <h2 class="text-xl font-bold text-fg font-heading tracking-wider mb-5">{{ isEdit ? '编辑帖子' : '✍️ 发表新帖' }}</h2>
 
     <div class="bg-card border border-border rounded-lg p-5 space-y-4">
-      <select v-model="form.category_id" class="w-full h-10 bg-input border border-border rounded-md px-3 text-sm text-fg font-mono outline-none focus:border-primary transition-colors">
+      <select v-model="categoryId" class="w-full h-10 bg-input border border-border rounded-md px-3 text-sm text-fg font-mono outline-none focus:border-primary transition-colors">
         <option v-for="cat in categories" :key="cat.id" :value="cat.id">{{ getIcon(cat.name) }} {{ cat.name }}</option>
       </select>
 
@@ -32,7 +32,8 @@ const turndown = new TurndownService({ headingStyle: 'atx' })
 
 const route = useRoute(); const router = useRouter()
 const submitting = ref(false); const categories = ref([])
-const form = reactive({ title: '', content: '', category_id: null })
+const categoryId = ref(null)
+const form = reactive({ title: '', content: '' })
 const isEdit = computed(() => !!route.query.edit)
 const toast = useToast()
 const postId = ref(0)
@@ -44,7 +45,7 @@ onMounted(async () => {
   api.get('/categories').then(r => {
     categories.value = r.data.data.categories
     const cid = route.query.category_id
-    form.category_id = cid ? Number(cid) : (categories.value[0]?.id || 1)
+    categoryId.value = cid ? Number(cid) : (categories.value[0]?.id ?? null)
   }).catch(() => toast.error('加载分类失败'))
 
   if (isEdit.value) {
@@ -53,10 +54,9 @@ onMounted(async () => {
       postId.value = p.id
       form.title = p.title
       form.content = p.content
-      form.category_id = p.category_id
+      categoryId.value = p.category_id
     }).catch(() => { toast.error('无法加载帖子'); router.push('/') })
   } else {
-    // 创建草稿帖子，拿到 ID
     try {
       const cid = route.query.category_id || 1
       const r = await api.post('/posts', { title: '', content: '', category_id: Number(cid), status: 'draft' })
@@ -65,7 +65,6 @@ onMounted(async () => {
   }
 })
 
-// 离开页面时如果没发布就删草稿
 onBeforeUnmount(() => {
   if (!isEdit.value && !published.value && postId.value) {
     api.delete(`/posts/${postId.value}`).catch(() => {})
@@ -74,16 +73,16 @@ onBeforeUnmount(() => {
 
 function handleSubmit() {
   if (!form.title.trim() || !form.content.trim()) { toast.warning('请填写标题和内容'); return }
+  if (!categoryId.value) { toast.warning('请选择分类'); return }
   submitting.value = true
   const md = turndown.turndown(form.content)
-  const payload = { title: form.title, content: md, category_id: form.category_id }
+  const payload = { title: form.title, content: md, category_id: Number(categoryId.value) }
 
   if (isEdit.value) {
     api.put(`/posts/${route.query.edit}`, payload)
       .then(() => { published.value = true; toast.success('更新成功'); router.push(`/post/${route.query.edit}`) })
       .catch(e => toast.error(e.message)).finally(() => submitting.value = false)
   } else {
-    // 更新草稿为正式帖子
     api.put(`/posts/${postId.value}`, { ...payload, status: 'published' })
       .then(() => { published.value = true; toast.success('发布成功'); router.push(`/post/${postId.value}`) })
       .catch(e => toast.error(e.message)).finally(() => submitting.value = false)

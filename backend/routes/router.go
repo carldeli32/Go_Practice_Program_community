@@ -57,10 +57,12 @@ func Setup(r *gin.Engine) {
 
 			auth.POST("/messages", controllers.SendMessage)
 			auth.GET("/messages", controllers.GetConversations)
+			auth.GET("/messages/stream", middlewares.TokenFromQuery(), controllers.MessageStream)
 			auth.GET("/messages/unread-count", controllers.GetUnreadCount)
 			auth.PUT("/messages/read-all", controllers.MarkAllRead)
 			auth.GET("/messages/:user_id", controllers.GetConversation)
 			auth.PUT("/messages/:user_id/read", controllers.MarkMessagesRead)
+			auth.PUT("/messages/:id/recall", controllers.RecallMessage)
 
 			// 关注
 			auth.POST("/follow", controllers.FollowUser)

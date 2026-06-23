@@ -1,12 +1,14 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"community/backend/data"
 	"community/backend/models"
 	"community/backend/service"
+	"community/backend/sse"
 
 	"github.com/gin-gonic/gin"
 )
@@ -134,4 +136,38 @@ func MarkMessagesRead(c *gin.Context) {
 	uid, _ := strconv.Atoi(partnerID)
 	data.MarkReadFrom(uint(uid), userID)
 	models.Success(c, "已标记", nil)
+}
+
+// ─── 撤回消息 ───
+func RecallMessage(c *gin.Context) {
+	msgID := strToUint(c.Param("id"))
+	if err := service.RecallMessage(msgID, c.GetUint("user_id")); err != nil {
+		code, msg := service.ToHTTP(err)
+		models.Error(c, code, msg)
+		return
+	}
+	models.Success(c, "已撤回", nil)
+}
+
+// ─── SSE 消息流 ───
+func MessageStream(c *gin.Context) {
+	userID := c.GetUint("user_id")
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Writer.Flush()
+
+	ch := sse.DefaultHub.Subscribe(userID)
+	defer sse.DefaultHub.Unsubscribe(userID, ch)
+
+	for {
+		select {
+		case data := <-ch:
+			fmt.Fprintf(c.Writer, "data: %s\n\n", data)
+			c.Writer.Flush()
+		case <-c.Request.Context().Done():
+			return
+		}
+	}
 }

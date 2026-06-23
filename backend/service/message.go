@@ -3,6 +3,10 @@ package service
 import (
 	"community/backend/data"
 	"community/backend/models"
+	"community/backend/sse"
+
+	"github.com/gin-gonic/gin"
+	"time"
 )
 
 // ─── 对话主题 ───
@@ -86,7 +90,11 @@ func SendMessage(fromID, toID, threadID uint, content string) (*models.Message, 
 		return nil, ErrDBOpFail
 	}
 
-	return data.FindMessageByID(msg.ID)
+	msg, err2 := data.FindMessageByID(msg.ID)
+	if err2 == nil {
+		sse.DefaultHub.Publish(toID, "new_message", msg)
+	}
+	return msg, nil
 }
 
 // ─── 会话列表 ───
@@ -156,4 +164,23 @@ func GetConversation(userID, partnerID, threadID uint) (*ConversationDetail, err
 		Partner:  models.User{ID: partner.ID, Username: partner.Username},
 		Messages: messages,
 	}, nil
+}
+
+// RecallMessage 撤回消息：仅发送者、5 分钟内
+func RecallMessage(msgID, userID uint) error {
+	msg, err := data.FindMessageByID(msgID)
+	if err != nil {
+		return ErrNotFound("消息")
+	}
+	if msg.FromUserID != userID {
+		return ErrForbidden
+	}
+	if time.Since(msg.CreatedAt) > 5*time.Minute {
+		return &AppError{Code: 400, Message: "超过 5 分钟，无法撤回"}
+	}
+	if err := data.RecallMessage(msgID, userID); err != nil {
+		return ErrDBOpFail
+	}
+	sse.DefaultHub.Publish(msg.ToUserID, "recall", gin.H{"message_id": msgID})
+	return nil
 }

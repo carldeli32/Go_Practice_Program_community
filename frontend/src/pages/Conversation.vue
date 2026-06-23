@@ -27,9 +27,17 @@
     <!-- Messages -->
     <div v-if="activeThread" ref="msgList" class="flex-1 overflow-y-auto py-2 space-y-3.5">
       <div v-if="messages.length === 0" class="text-center text-muted-fg py-10 text-sm">发送第一条消息吧~</div>
-      <div v-for="msg in messages" :key="msg.id" :class="['max-w-[75%]', msg.from_user_id === myID ? 'ml-auto text-right' : '']">
-        <div :class="['inline-block px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words', msg.from_user_id === myID ? 'bg-primary text-bg' : 'bg-secondary text-fg']">{{ msg.content }}</div>
-        <div class="text-[10px] text-muted-fg font-mono mt-1 px-1">{{ fmtTime(msg.created_at) }}</div>
+      <div v-for="msg in messages" :key="msg.id" :class="['max-w-[75%]', msg.from_user_id === myID ? 'ml-auto text-right' : '']"
+        @contextmenu.prevent="openMenu(msg, $event)">
+        <template v-if="msg.is_recalled">
+          <div class="inline-block px-3.5 py-2.5 rounded-2xl text-sm italic bg-card border border-border text-muted-fg">
+            {{ msg.from_user_id === myID ? '你撤回了一条消息' : '对方撤回了一条消息' }}
+          </div>
+        </template>
+        <template v-else>
+          <div :class="['inline-block px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words', msg.from_user_id === myID ? 'bg-primary text-bg' : 'bg-secondary text-fg']">{{ msg.content }}</div>
+          <div class="text-[10px] text-muted-fg font-mono mt-1 px-1">{{ fmtTime(msg.created_at) }}</div>
+        </template>
       </div>
     </div>
 
@@ -39,6 +47,14 @@
         <input v-model="text" @keyup.enter="sendMsg" placeholder="输入消息..." class="flex-1 h-9 bg-input border border-border rounded-md px-3 text-sm text-fg placeholder-muted-fg outline-none focus:border-primary transition-colors">
         <button @click="sendMsg" class="px-4 bg-primary text-bg border-0 rounded-md text-xs font-bold font-heading tracking-wide cursor-pointer hover:brightness-110 transition-all">发送</button>
       </div>
+    </div>
+
+    <!-- Context Menu Backdrop -->
+    <div v-if="ctxMenu.show" class="fixed inset-0 z-599" @click="closeMenu" @contextmenu.prevent="closeMenu"></div>
+
+    <!-- Context Menu -->
+    <div v-if="ctxMenu.show" :style="{ left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' }" class="fixed z-600 bg-card border border-border rounded-md py-1 shadow-lg min-w-[100px]">
+      <button @click="recallMsg" class="w-full text-left px-3 py-1.5 text-xs text-danger font-mono cursor-pointer bg-transparent border-0 hover:bg-secondary transition-colors">撤回</button>
     </div>
 
     <!-- New Thread Dialog -->
@@ -67,7 +83,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '../stores/auth'
 import api from '../api'
@@ -79,6 +95,26 @@ const partner = ref({}); const threads = ref([]); const activeThread = ref(0)
 const messages = ref([]); const text = ref(''); const msgList = ref(null)
 const showNewThread = ref(false); const newThreadTitle = ref('')
 const deleteOpen = ref(false)
+const stream = ref(null)
+const partnerId = computed(() => Number(route.params.id))
+
+const ctxMenu = reactive({ show: false, x: 0, y: 0, msg: null })
+
+function openMenu(msg, e) {
+  if (!msg.is_recalled && msg.from_user_id === myID.value) {
+    ctxMenu.msg = msg
+    ctxMenu.x = e.clientX
+    ctxMenu.y = e.clientY
+    ctxMenu.show = true
+  }
+}
+function closeMenu() { ctxMenu.show = false }
+function recallMsg() {
+  if (!ctxMenu.msg) return
+  api.put(`/messages/${ctxMenu.msg.id}/recall`)
+    .then(() => { ctxMenu.msg.is_recalled = true; closeMenu(); toast.success('已撤回') })
+    .catch(e => { toast.error(e.message); closeMenu() })
+}
 
 async function loadThreads() {
   const r = await api.get('/threads', { params: { with: route.params.id } })
@@ -116,5 +152,23 @@ function doDelete() {
   }).catch(e => toast.error(e.message))
 }
 function fmtTime(s) { return s ? new Date(s).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '' }
-onMounted(loadThreads)
+
+function connectSSE() {
+  const token = localStorage.getItem('token')
+  stream.value = new EventSource('/api/messages/stream?token=' + encodeURIComponent(token))
+  stream.value.onmessage = (e) => {
+    const d = JSON.parse(e.data)
+    if (d.type === 'new_message' && d.data.from_user_id === partnerId.value) {
+      messages.value.push(d.data)
+      api.put(`/messages/${partnerId.value}/read`).catch(() => {})
+      nextTick(() => { if (msgList.value) msgList.value.scrollTop = msgList.value.scrollHeight })
+    } else if (d.type === 'recall') {
+      const msg = messages.value.find(m => m.id === d.data.message_id)
+      if (msg) msg.is_recalled = true
+    }
+  }
+}
+
+onMounted(() => { loadThreads(); connectSSE() })
+onBeforeUnmount(() => { closeMenu(); stream.value?.close() })
 </script>
