@@ -1,5 +1,6 @@
 # ── 第一阶段：编译 Go ──
 FROM golang:1.24-alpine AS go-builder
+ENV GOTOOLCHAIN=local
 WORKDIR /app
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download
