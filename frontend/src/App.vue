@@ -89,7 +89,7 @@
     </div>
 
     <!-- MAIN -->
-    <main class="max-w-[1440px] mx-auto px-2 sm:px-5 py-3 sm:py-5 min-h-[calc(100vh-200px)]">
+    <main class="max-w-[1440px] mx-auto px-2 sm:px-5 py-3 sm:py-5 overflow-y-auto" style="height: calc(100vh - 140px)">
       <router-view v-slot="{ Component }">
         <keep-alive :include="['Home', 'Messages', 'Friends']">
           <component :is="Component" />
@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuth, logout } from './stores/auth'
 import api from './api'
@@ -120,6 +120,8 @@ const router = useRouter()
 const unreadCount = ref(0)
 const announcement = ref('')
 const mobileMenu = ref(false)
+const sharedCategories = ref([])
+provide('sharedCategories', sharedCategories)
 
 const navItems = [
   { path: '/', label: '首页' },
@@ -139,7 +141,11 @@ async function fetchAnnouncement() {
 }
 
 watch(() => router.currentRoute.value, () => { fetchUnread(); mobileMenu.value = false })
-onMounted(() => { fetchUnread(); fetchAnnouncement() })
+onMounted(() => { fetchUnread(); fetchAnnouncement(); fetchSharedCategories() })
 const timer = setInterval(fetchUnread, 30000)
 onUnmounted(() => clearInterval(timer))
+
+async function fetchSharedCategories() {
+  try { const r = await api.get('/categories'); sharedCategories.value = r.data.data.categories } catch (e) {}
+}
 </script>

@@ -21,7 +21,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '../api'
 import { useToast } from '../composables/toast'
@@ -31,22 +31,35 @@ import TurndownService from 'turndown'
 const turndown = new TurndownService({ headingStyle: 'atx' })
 
 const route = useRoute(); const router = useRouter()
-const submitting = ref(false); const categories = ref([])
+const submitting = ref(false)
 const categoryId = ref(null)
 const form = reactive({ title: '', content: '' })
 const isEdit = computed(() => !!route.query.edit)
 const toast = useToast()
 const postId = ref(0)
 const published = ref(false)
+const pageReady = ref(0)
+
+// 尝试用 App.vue 预热的分类，秒显下拉框
+const sharedCategories = inject('sharedCategories', null)
+const categories = sharedCategories?.value?.length ? sharedCategories : ref([])
 
 function getIcon(n) { const m = {'综合讨论':'💬','技术交流':'💻','军事纵横':'⚔️','历史长廊':'📜','文学艺术':'🎨','生活杂谈':'🌻'}; return m[n] || '📌' }
 
-onMounted(async () => {
-  api.get('/categories').then(r => {
-    categories.value = r.data.data.categories
+onMounted(() => {
+  pageReady.value = Date.now()
+
+  // 如果没有预热，自己拉分类
+  if (!categories.value.length) {
+    api.get('/categories').then(r => {
+      categories.value = r.data.data.categories
+      const cid = route.query.category_id
+      categoryId.value = cid ? Number(cid) : (categories.value[0]?.id ?? null)
+    }).catch(() => toast.error('加载分类失败'))
+  } else {
     const cid = route.query.category_id
     categoryId.value = cid ? Number(cid) : (categories.value[0]?.id ?? null)
-  }).catch(() => toast.error('加载分类失败'))
+  }
 
   if (isEdit.value) {
     api.get(`/posts/${route.query.edit}`).then(r => {
@@ -57,11 +70,11 @@ onMounted(async () => {
       categoryId.value = p.category_id
     }).catch(() => { toast.error('无法加载帖子'); router.push('/') })
   } else {
-    try {
-      const cid = route.query.category_id || 1
-      const r = await api.post('/posts', { title: '', content: '', category_id: Number(cid), status: 'draft' })
-      postId.value = r.data.data.post.id
-    } catch (e) { toast.error('初始化失败') }
+    // 后台创建草稿，不阻塞页面渲染
+    const cid = route.query.category_id || 1
+    api.post('/posts', { title: '', content: '', category_id: Number(cid), status: 'draft' })
+      .then(r => { postId.value = r.data.data.post.id })
+      .catch(() => toast.error('初始化失败'))
   }
 })
 
@@ -74,6 +87,7 @@ onBeforeUnmount(() => {
 function handleSubmit() {
   if (!form.title.trim() || !form.content.trim()) { toast.warning('请填写标题和内容'); return }
   if (!categoryId.value) { toast.warning('请选择分类'); return }
+  if (Date.now() - pageReady.value < 1000) { toast.warning('编辑时间不得少于 1 秒'); return }
   submitting.value = true
   const md = turndown.turndown(form.content)
   const payload = { title: form.title, content: md, category_id: Number(categoryId.value) }
