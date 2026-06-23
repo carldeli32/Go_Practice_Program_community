@@ -155,8 +155,15 @@ function fmtTime(s) { return s ? new Date(s).toLocaleTimeString('zh-CN', { hour:
 
 function connectSSE() {
   const token = localStorage.getItem('token')
-  stream.value = new EventSource('/api/messages/stream?token=' + encodeURIComponent(token))
-  stream.value.onmessage = (e) => {
+  if (!token) {
+    console.warn('SSE: 未登录，跳过连接')
+    return
+  }
+  console.log('SSE: 正在连接...', '/api/messages/stream?token=' + token.slice(-8))
+  const es = new EventSource('/api/messages/stream?token=' + encodeURIComponent(token))
+  es.onopen = () => console.log('SSE: 连接成功')
+  es.onerror = () => console.error('SSE: 连接错误')
+  es.onmessage = (e) => {
     const d = JSON.parse(e.data)
     if (d.type === 'new_message' && d.data.from_user_id === partnerId.value) {
       messages.value.push(d.data)
@@ -167,6 +174,7 @@ function connectSSE() {
       if (msg) msg.is_recalled = true
     }
   }
+  stream.value = es
 }
 
 onMounted(() => { loadThreads(); connectSSE() })
