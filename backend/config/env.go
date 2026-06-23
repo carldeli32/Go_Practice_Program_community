@@ -21,6 +21,9 @@ const (
 	EnvServeFile         = "SERVE_FILE_PREFIX"
 	EnvRootPassword      = "ROOT_PASSWORD"
 	EnvRootPasswordFile  = "ROOT_PASSWORD_FILE"
+	EnvDBMaxOpenConns    = "DB_MAX_OPEN_CONNS"
+	EnvDBMaxIdleConns    = "DB_MAX_IDLE_CONNS"
+	EnvDBConnMaxLifetime = "DB_CONN_MAX_LIFETIME"
 )
 
 // LoadEnv 加载 .env 文件
@@ -108,4 +111,35 @@ func RootPassword() string {
 
 	// 4. 首次部署但没设密码
 	panic("首次部署需要设置 ROOT_PASSWORD 或 ROOT_PASSWORD_FILE 环境变量")
+}
+
+// DBMaxOpenConns 返回数据库最大连接数
+func DBMaxOpenConns() int {
+	return parseIntEnv(EnvDBMaxOpenConns, 25)
+}
+
+// DBMaxIdleConns 返回数据库最大空闲连接数
+func DBMaxIdleConns() int {
+	return parseIntEnv(EnvDBMaxIdleConns, 10)
+}
+
+// DBConnMaxLifetime 返回连接最大存活秒数
+func DBConnMaxLifetime() int {
+	return parseIntEnv(EnvDBConnMaxLifetime, 300)
+}
+
+// parseIntEnv 解析整数环境变量，失败返回默认值
+func parseIntEnv(key string, defaultVal int) int {
+	val := os.Getenv(key)
+	if val == "" {
+		return defaultVal
+	}
+	n := 0
+	for _, c := range val {
+		if c < '0' || c > '9' {
+			return defaultVal
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"community/backend/models"
 
@@ -42,6 +43,14 @@ func InitDB() {
 
 	// 种子：超级管理员 root
 	seedRootUser()
+
+	// 配置数据库连接池
+	sqlDB, _ := DB.DB()
+	sqlDB.SetMaxOpenConns(DBMaxOpenConns())
+	sqlDB.SetMaxIdleConns(DBMaxIdleConns())
+	sqlDB.SetConnMaxLifetime(time.Duration(DBConnMaxLifetime()) * time.Second)
+	fmt.Printf("🔗 连接池: max_open=%d max_idle=%d lifetime=%ds\n",
+		DBMaxOpenConns(), DBMaxIdleConns(), DBConnMaxLifetime())
 }
 
 func seedCategories() {

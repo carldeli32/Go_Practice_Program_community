@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"time"
+
 	"community/backend/controllers"
 	"community/backend/middlewares"
 	"community/backend/models"
@@ -9,6 +11,7 @@ import (
 )
 
 func Setup(r *gin.Engine) {
+	r.Use(middlewares.SecurityHeaders())
 	r.GET("/ping", func(c *gin.Context) { models.Success(c, "pong", nil) })
 
 	// 静态文件服务：前端 + 上传文件
@@ -22,8 +25,8 @@ func Setup(r *gin.Engine) {
 
 	api := r.Group("/api")
 	{
-		api.POST("/register", controllers.Register)
-		api.POST("/login", controllers.Login)
+		api.POST("/register", middlewares.RateLimit(3, time.Hour), controllers.Register)
+		api.POST("/login", middlewares.RateLimit(5, time.Minute), controllers.Login)
 		api.GET("/users", controllers.SearchUsers)
 		api.GET("/users/:id", controllers.GetUserProfile)
 		api.GET("/posts", controllers.GetPosts)
