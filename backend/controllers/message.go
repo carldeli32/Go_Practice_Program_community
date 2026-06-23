@@ -156,6 +156,7 @@ func MessageStream(c *gin.Context) {
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no") // 禁用 nginx 缓冲
 	c.Writer.Flush()
 
 	ch := sse.DefaultHub.Subscribe(userID)

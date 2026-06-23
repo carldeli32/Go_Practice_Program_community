@@ -89,15 +89,21 @@ func UpdatePost(c *gin.Context) {
 	roles := c.GetStringSlice("roles")
 
 	var req struct {
-		Title   string `json:"title"`
-		Content string `json:"content"`
+		Title      string `json:"title"`
+		Content    string `json:"content"`
+		CategoryID *uint  `json:"category_id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		models.Error(c, http.StatusBadRequest, "参数错误")
 		return
 	}
 
-	post, err := service.UpdatePost(strToUint(id), userID, req.Title, req.Content, roles)
+	categoryID := uint(0)
+	if req.CategoryID != nil {
+		categoryID = *req.CategoryID
+	}
+
+	post, err := service.UpdatePost(strToUint(id), userID, req.Title, req.Content, categoryID, roles)
 	if err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)

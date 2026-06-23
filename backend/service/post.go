@@ -46,7 +46,7 @@ func CreatePost(userID uint, title, content string, categoryID uint, status stri
 
 // ─── 编辑 ───
 
-func UpdatePost(postID, userID uint, title, content string, roles []string) (*models.Post, error) {
+func UpdatePost(postID, userID uint, title, content string, categoryID uint, roles []string) (*models.Post, error) {
 	post, err := data.FindPostByIDRaw(postID)
 	if err != nil {
 		return nil, ErrNotFound("帖子")
@@ -62,6 +62,9 @@ func UpdatePost(postID, userID uint, title, content string, roles []string) (*mo
 	}
 	if content != "" {
 		updates["content"] = content
+	}
+	if categoryID > 0 {
+		updates["category_id"] = categoryID
 	}
 	if len(updates) == 0 {
 		return nil, ErrNoUpdateContent
