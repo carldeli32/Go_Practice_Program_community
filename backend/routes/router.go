@@ -57,12 +57,14 @@ func Setup(r *gin.Engine) {
 
 			auth.POST("/messages", controllers.SendMessage)
 			auth.GET("/messages", controllers.GetConversations)
-			auth.GET("/messages/stream", middlewares.TokenFromQuery(), controllers.MessageStream)
 			auth.GET("/messages/unread-count", controllers.GetUnreadCount)
 			auth.PUT("/messages/read-all", controllers.MarkAllRead)
 			auth.GET("/messages/:user_id", controllers.GetConversation)
 			auth.PUT("/messages/:user_id/read", controllers.MarkMessagesRead)
 			auth.PUT("/messages/recall/:id", controllers.RecallMessage)
+
+			// SSE 流（TokenFromQuery → AuthRequired 顺序不可逆）
+			api.GET("/messages/stream", middlewares.TokenFromQuery(), middlewares.AuthRequired(), controllers.MessageStream)
 
 			// 关注
 			auth.POST("/follow", controllers.FollowUser)
