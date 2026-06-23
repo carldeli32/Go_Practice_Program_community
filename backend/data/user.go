@@ -63,15 +63,30 @@ func DeleteUser(id uint) error {
 
 // ─── 列表 ───
 
-// ListUsers 获取用户列表（支持搜索，带角色）
-func ListUsers(search string) ([]models.User, error) {
+// ListUsers 获取用户列表（支持搜索、分页，带角色）
+func ListUsers(search string, page, pageSize int) ([]models.User, int64, error) {
 	var users []models.User
-	query := config.DB.Model(&models.User{}).Preload("Roles")
+	var total int64
+
+	query := config.DB.Model(&models.User{})
 	if search != "" {
 		query = query.Where("username LIKE ?", "%"+search+"%")
 	}
-	err := query.Order("id ASC").Find(&users).Error
-	return users, err
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	err := query.Preload("Roles").Order("id ASC").
+		Offset(offset).Limit(pageSize).
+		Find(&users).Error
+	return users, total, err
 }
 
 // ─── 更新 ───

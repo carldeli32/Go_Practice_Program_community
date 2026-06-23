@@ -25,7 +25,6 @@ func Setup(r *gin.Engine) {
 
 	api := r.Group("/api")
 	{
-		api.POST("/register", middlewares.RateLimit(3, time.Hour), controllers.Register)
 		api.POST("/login", middlewares.RateLimit(5, time.Minute), controllers.Login)
 		api.GET("/users", controllers.SearchUsers)
 		api.GET("/users/:id", controllers.GetUserProfile)

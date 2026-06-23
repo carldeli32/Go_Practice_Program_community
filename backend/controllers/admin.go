@@ -13,7 +13,11 @@ import (
 
 // ─── 用户列表 ───
 func AdminListUsers(c *gin.Context) {
-	users, err := data.ListUsers(c.Query("q"))
+	q := c.Query("q")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+
+	users, total, err := data.ListUsers(q, page, pageSize)
 	if err != nil {
 		models.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -31,7 +35,7 @@ func AdminListUsers(c *gin.Context) {
 	for i, u := range users {
 		items[i] = userItem{u.ID, u.Username, u.IsAdminLike(), u.IsBanned, u.Motto, u.RoleNames()}
 	}
-	models.Success(c, "获取成功", gin.H{"users": items, "total": len(items)})
+	models.Success(c, "获取成功", gin.H{"users": items, "total": total})
 }
 
 // ─── 创建用户 ───

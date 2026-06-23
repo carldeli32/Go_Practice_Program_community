@@ -24,6 +24,8 @@ const (
 	EnvDBMaxOpenConns    = "DB_MAX_OPEN_CONNS"
 	EnvDBMaxIdleConns    = "DB_MAX_IDLE_CONNS"
 	EnvDBConnMaxLifetime = "DB_CONN_MAX_LIFETIME"
+	EnvTLSCertFile       = "TLS_CERT_FILE"
+	EnvTLSKeyFile        = "TLS_KEY_FILE"
 )
 
 // LoadEnv 加载 .env 文件
@@ -142,4 +144,14 @@ func parseIntEnv(key string, defaultVal int) int {
 		n = n*10 + int(c-'0')
 	}
 	return n
+}
+
+// TLSCertFile 返回 TLS 证书文件路径
+func TLSCertFile() string {
+	return GetEnv(EnvTLSCertFile, "")
+}
+
+// TLSKeyFile 返回 TLS 私钥文件路径
+func TLSKeyFile() string {
+	return GetEnv(EnvTLSKeyFile, "")
 }

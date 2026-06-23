@@ -41,9 +41,19 @@ func main() {
 
 	// 启动
 	go func() {
-		fmt.Printf("🚀 服务启动，监听 %s\n", config.ServerPort())
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("启动失败: %v", err)
+		certFile := config.TLSCertFile()
+		keyFile := config.TLSKeyFile()
+		fmt.Printf("🚀 服务启动，监听 %s", config.ServerPort())
+		if certFile != "" && keyFile != "" {
+			fmt.Println(" (HTTPS)")
+			if err := srv.ListenAndServeTLS(certFile, keyFile); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("启动失败: %v", err)
+			}
+		} else {
+			fmt.Println(" (HTTP)")
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Fatalf("启动失败: %v", err)
+			}
 		}
 	}()
 

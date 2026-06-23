@@ -126,10 +126,19 @@ func GetUserProfile(c *gin.Context) {
 }
 
 // ========== 搜索用户 ==========
-// GET /api/users?q=xxx
+// GET /api/users?q=xxx&page=1&page_size=20
 func SearchUsers(c *gin.Context) {
 	q := c.Query("q")
-	users, err := data.ListUsers(q)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 20
+	}
+
+	users, total, err := data.ListUsers(q, page, pageSize)
 	if err != nil {
 		models.Error(c, http.StatusInternalServerError, "查询失败")
 		return
@@ -145,5 +154,10 @@ func SearchUsers(c *gin.Context) {
 		items[i] = userItem{u.ID, u.Username, u.Motto}
 	}
 
-	models.Success(c, "获取成功", gin.H{"users": items})
+	models.Success(c, "获取成功", gin.H{
+		"users":     items,
+		"total":     total,
+		"page":      page,
+		"page_size": pageSize,
+	})
 }
