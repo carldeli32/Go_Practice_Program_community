@@ -18,6 +18,8 @@ func Setup(r *gin.Engine) {
 	r.Static("/uploads/images", "../uploads/images")
 	r.Static("/uploads/files", "../uploads/files")
 	r.StaticFile("/", "../frontend/dist/index.html")
+	r.StaticFile("/manifest.json", "../frontend/dist/manifest.json")
+	r.StaticFile("/sw.js", "../frontend/dist/sw.js")
 	r.Static("/assets", "../frontend/dist/assets")
 	r.NoRoute(func(c *gin.Context) {
 		c.File("../frontend/dist/index.html")

@@ -132,7 +132,13 @@ async function switchThread(tid) { activeThread.value = tid; await loadMessages(
 function sendMsg() {
   if (!text.value.trim()) return
   api.post('/messages', { to_user_id: Number(route.params.id), thread_id: activeThread.value, content: text.value })
-    .then(() => { text.value = ''; loadMessages() }).catch(e => toast.error(e.message))
+    .then(res => {
+      text.value = ''
+      // 直接追加返回的消息，不重拉整个对话
+      messages.value.push(res.data.data.message)
+      api.put(`/messages/${partnerId.value}/read`).catch(() => {})
+      nextTick(() => { if (msgList.value) msgList.value.scrollTop = msgList.value.scrollHeight })
+    }).catch(e => toast.error(e.message))
 }
 function createThread() {
   if (!newThreadTitle.value.trim()) return
