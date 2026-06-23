@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,7 +32,13 @@ func main() {
 	)
 
 	r := gin.Default()
-	r.SetTrustedProxies(nil)
+
+	trusted := config.TrustedProxies()
+	if trusted != "" {
+		r.SetTrustedProxies(strings.Split(trusted, ","))
+	} else {
+		r.SetTrustedProxies(nil)
+	}
 	routes.Setup(r)
 
 	srv := &http.Server{

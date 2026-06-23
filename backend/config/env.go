@@ -26,6 +26,7 @@ const (
 	EnvDBConnMaxLifetime = "DB_CONN_MAX_LIFETIME"
 	EnvTLSCertFile       = "TLS_CERT_FILE"
 	EnvTLSKeyFile        = "TLS_KEY_FILE"
+	EnvTrustedProxies    = "TRUSTED_PROXIES"
 )
 
 // LoadEnv 加载 .env 文件
@@ -154,4 +155,9 @@ func TLSCertFile() string {
 // TLSKeyFile 返回 TLS 私钥文件路径
 func TLSKeyFile() string {
 	return GetEnv(EnvTLSKeyFile, "")
+}
+
+// TrustedProxies 返回信任的代理 IP，逗号分隔（Docker 内用 0.0.0.0/0）
+func TrustedProxies() string {
+	return GetEnv(EnvTrustedProxies, "")
 }
