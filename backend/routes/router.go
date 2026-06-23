@@ -62,7 +62,7 @@ func Setup(r *gin.Engine) {
 			auth.PUT("/messages/read-all", controllers.MarkAllRead)
 			auth.GET("/messages/:user_id", controllers.GetConversation)
 			auth.PUT("/messages/:user_id/read", controllers.MarkMessagesRead)
-			auth.PUT("/messages/:id/recall", controllers.RecallMessage)
+			auth.PUT("/messages/recall/:id", controllers.RecallMessage)
 
 			// 关注
 			auth.POST("/follow", controllers.FollowUser)

@@ -111,7 +111,7 @@ function openMenu(msg, e) {
 function closeMenu() { ctxMenu.show = false }
 function recallMsg() {
   if (!ctxMenu.msg) return
-  api.put(`/messages/${ctxMenu.msg.id}/recall`)
+  api.put(`/messages/recall/${ctxMenu.msg.id}`)
     .then(() => { ctxMenu.msg.is_recalled = true; closeMenu(); toast.success('已撤回') })
     .catch(e => { toast.error(e.message); closeMenu() })
 }
