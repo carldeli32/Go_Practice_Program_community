@@ -90,7 +90,11 @@
 
     <!-- MAIN -->
     <main class="max-w-[1440px] mx-auto px-2 sm:px-5 py-3 sm:py-5 min-h-[calc(100vh-200px)]">
-      <router-view />
+      <router-view v-slot="{ Component }">
+        <keep-alive :include="['Home', 'Messages', 'Friends']">
+          <component :is="Component" />
+        </keep-alive>
+      </router-view>
     </main>
 
     <!-- FOOTER -->
