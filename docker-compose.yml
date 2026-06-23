@@ -3,7 +3,7 @@ services:
     build: .
     restart: always
     environment:
-      DB_DSN: ${MYSQL_USER}:${MYSQL_PASSWORD}@tcp(mysql:3306)/community?charset=utf8mb4&parseTime=True
+      DB_DSN: root:${MYSQL_ROOT_PASSWORD}@tcp(mysql:3306)/community?charset=utf8mb4&parseTime=True
       JWT_SECRET: ${JWT_SECRET}
       ROOT_PASSWORD: ${ROOT_PASSWORD}
       PORT: "8080"
@@ -21,8 +21,6 @@ services:
     restart: always
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_DATABASE: community
     volumes:
       - mysql_data:/var/lib/mysql
