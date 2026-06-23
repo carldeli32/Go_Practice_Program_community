@@ -1,6 +1,6 @@
 <template>
-  <div class="flex justify-center pt-5">
-    <div class="w-[420px] bg-card border border-border rounded-lg p-8">
+  <div class="flex justify-center pt-5 px-3">
+    <div class="w-full max-w-[420px] bg-card border border-border rounded-lg p-6 sm:p-8">
       <h2 class="text-center text-xl font-bold text-fg font-heading tracking-wider mb-6">{{ isRegister ? '注册' : '登录' }}</h2>
 
       <div class="space-y-4">

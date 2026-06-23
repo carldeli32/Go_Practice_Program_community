@@ -1,7 +1,7 @@
 <template>
   <div class="grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] gap-5 items-start">
-    <!-- LEFT SIDEBAR -->
-    <aside class="space-y-5">
+    <!-- LEFT SIDEBAR - desktop only -->
+    <aside class="hidden lg:block space-y-5">
       <div>
         <h3 class="text-xs font-bold font-heading tracking-wide uppercase mb-2.5 pl-2.5 border-l-[3px] border-success text-success">主题频道</h3>
         <input v-model="channelSearch" placeholder="搜索频道..." class="w-full h-8 bg-input border border-border rounded-md px-2.5 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-primary transition-colors mb-2">
@@ -27,10 +27,24 @@
       </div>
     </aside>
 
+    <!-- Mobile category scroll -->
+    <div class="lg:hidden -mx-2 px-2 overflow-x-auto scrollbar-none">
+      <div class="flex gap-1.5 pb-2 min-w-max">
+        <button @click="backToCategories"
+          :class="['px-3 py-1.5 rounded-full text-[11px] font-mono whitespace-nowrap', !activeCategory ? 'bg-primary text-bg' : 'bg-card text-muted-fg border border-border']">
+          全部
+        </button>
+        <button v-for="cat in categories" :key="cat.id" @click="enterCategory(cat)"
+          :class="['px-3 py-1.5 rounded-full text-[11px] font-mono whitespace-nowrap', activeCategory?.id === cat.id ? 'bg-primary text-bg' : 'bg-card text-muted-fg border border-border']">
+          {{ getIcon(cat.name) }} {{ cat.name }}
+        </button>
+      </div>
+    </div>
+
     <!-- CENTER FEED -->
-    <main class="min-w-0 space-y-3.5">
+    <main class="min-w-0 space-y-3 sm:space-y-3.5">
       <!-- Compose -->
-      <div v-if="auth.token" @click="$router.push('/create')" class="flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-lg cursor-pointer hover:border-border-strong transition-colors">
+      <div v-if="auth.token" @click="$router.push('/create')" class="flex items-center gap-3 px-3 sm:px-4 py-3 bg-card border border-border rounded-lg cursor-pointer hover:border-border-strong transition-colors">
         <span class="w-8 h-8 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-xs font-bold text-bg flex-shrink-0">{{ auth.user?.username?.charAt(0) }}</span>
         <span class="flex-1 text-[13px] text-muted-fg">分享你的想法...</span>
         <span class="text-[11px] text-primary font-heading tracking-wide">✏️ 发帖</span>
@@ -43,9 +57,9 @@
           <span class="text-base font-bold text-fg">{{ getIcon(activeCategory.name) }} {{ activeCategory.name }}</span>
         </div>
         <div v-else class="flex gap-1">
-          <span class="text-[13px] font-semibold font-heading tracking-wide text-primary border-b-2 border-primary px-3 py-1.5">📋 最新帖子</span>
+          <span class="text-[13px] font-semibold font-heading tracking-wide text-primary border-b-2 border-primary px-3 py-1.5 hidden sm:inline">📋 最新帖子</span>
         </div>
-        <input v-if="activeCategory" v-model="postSearch" @change="searchPosts" placeholder="搜索帖子..." class="w-[220px] h-8 bg-input border border-border rounded-md px-3 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-primary transition-colors">
+        <input v-if="activeCategory" v-model="postSearch" @change="searchPosts" placeholder="搜索帖子..." class="w-[160px] sm:w-[220px] h-8 bg-input border border-border rounded-md px-3 text-xs text-fg placeholder-muted-fg font-mono outline-none focus:border-primary transition-colors">
       </div>
 
       <!-- Empty -->
@@ -53,30 +67,30 @@
 
       <!-- Post Cards -->
       <article v-for="post in posts" :key="post.id" @click="$router.push(`/post/${post.id}`)"
-        class="bg-card border border-border rounded-lg p-4 cursor-pointer transition-all hover:border-border-strong hover:shadow-[0_0_20px_var(--color-primary-glow)]">
+        class="bg-card border border-border rounded-lg p-3 sm:p-4 cursor-pointer transition-all hover:border-border-strong hover:shadow-[0_0_20px_var(--color-primary-glow)]">
         <div class="flex items-center justify-between mb-2.5">
           <div class="flex items-center gap-2">
-            <span class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold text-bg flex-shrink-0" :style="{ background: `linear-gradient(135deg, ${avatarColor(post.user?.username)}, ${avatarColor(post.user?.username)}88)` }">{{ post.user?.username?.charAt(0) || '?' }}</span>
+            <span class="w-6 sm:w-7 h-6 sm:h-7 rounded-full flex items-center justify-center text-[10px] sm:text-[11px] font-bold text-bg flex-shrink-0" :style="{ background: `linear-gradient(135deg, ${avatarColor(post.user?.username)}, ${avatarColor(post.user?.username)}88)` }">{{ post.user?.username?.charAt(0) || '?' }}</span>
             <div>
               <span class="text-xs font-semibold text-fg">{{ post.user?.username || '匿名' }}</span>
               <span class="text-[9px] text-muted-fg font-mono bg-primary/10 border border-primary/20 rounded px-1 ml-1">Lv.1</span>
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <span class="text-[9px] text-primary font-mono bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5">{{ post.category?.name || '综合讨论' }}</span>
-            <span class="text-[10px] text-muted-fg font-mono">{{ fmtTime(post.created_at) }}</span>
+          <div class="flex items-center gap-1 sm:gap-2">
+            <span class="text-[8px] sm:text-[9px] text-primary font-mono bg-primary/10 border border-primary/20 rounded px-1 sm:px-1.5 py-0.5 hidden sm:inline">{{ post.category?.name || '综合讨论' }}</span>
+            <span class="text-[9px] sm:text-[10px] text-muted-fg font-mono">{{ fmtTime(post.created_at) }}</span>
           </div>
         </div>
-        <h3 class="text-[15px] font-semibold text-fg font-heading tracking-wide mb-1.5 group-hover:text-primary transition-colors">{{ post.title }}</h3>
-        <p class="text-xs text-muted-fg leading-relaxed line-clamp-2" v-html="previewMD(post.content)" />
+        <h3 class="text-sm sm:text-[15px] font-semibold text-fg font-heading tracking-wide mb-1.5 group-hover:text-primary transition-colors">{{ post.title }}</h3>
+        <p class="text-[11px] sm:text-xs text-muted-fg leading-relaxed line-clamp-2" v-html="previewMD(post.content)" />
       </article>
 
       <!-- Pagination -->
       <div v-if="total > pageSize" class="flex justify-center mt-5 gap-1">
-        <button :disabled="page <= 1" @click="page--; fetchPosts()" class="px-3 py-1.5 bg-card border border-border rounded text-xs text-fg font-mono cursor-pointer disabled:opacity-40 hover:border-primary transition-colors">‹</button>
+        <button :disabled="page <= 1" @click="page--; fetchPosts()" class="px-2 sm:px-3 py-1.5 bg-card border border-border rounded text-xs text-fg font-mono cursor-pointer disabled:opacity-40 hover:border-primary transition-colors">‹</button>
         <button v-for="p in pageRange" :key="p" @click="page = p; fetchPosts()"
-          :class="['px-3 py-1.5 rounded text-xs font-mono cursor-pointer transition-all', p === page ? 'bg-primary text-bg border border-primary' : 'bg-card border border-border text-fg hover:border-primary']">{{ p }}</button>
-        <button :disabled="page >= maxPage" @click="page++; fetchPosts()" class="px-3 py-1.5 bg-card border border-border rounded text-xs text-fg font-mono cursor-pointer disabled:opacity-40 hover:border-primary transition-colors">›</button>
+          :class="['px-2 sm:px-3 py-1.5 rounded text-xs font-mono cursor-pointer transition-all', p === page ? 'bg-primary text-bg border border-primary' : 'bg-card border border-border text-fg hover:border-primary']">{{ p }}</button>
+        <button :disabled="page >= maxPage" @click="page++; fetchPosts()" class="px-2 sm:px-3 py-1.5 bg-card border border-border rounded text-xs text-fg font-mono cursor-pointer disabled:opacity-40 hover:border-primary transition-colors">›</button>
       </div>
     </main>
 
@@ -111,7 +125,7 @@
           <div class="bg-card border border-border rounded-md p-3 text-center"><div class="text-lg font-bold text-warning font-heading">{{ categories.length }}</div><div class="text-[9px] text-muted-fg font-mono mt-0.5">频道</div></div>
         </div>
       </div>
-      <div>
+      <div class="hidden lg:block">
         <h3 class="text-xs font-bold font-heading tracking-wide uppercase mb-2.5 pl-2.5 border-l-[3px] border-[#f72585] text-[#f72585]">热门推荐</h3>
         <div class="space-y-1.5">
           <div v-if="hotPosts.length === 0" class="text-xs text-muted-fg text-center py-5">暂无数据</div>
@@ -199,11 +213,9 @@ function searchPosts() { page.value = 1; fetchPosts() }
 function getIcon(n) { const m = { '综合讨论':'💬','技术交流':'💻','军事纵横':'⚔️','历史长廊':'📜','文学艺术':'🎨','生活杂谈':'🌻' }; return m[n] || '📌' }
 function avatarColor(n) { const c = ['#00c8ff','#7c3aed','#00ff94','#ff6b35','#f72585','#ffd60a']; let h = 0; for (let ch of (n || '?')) h = ch.charCodeAt(0) + ((h << 5) - h); return c[Math.abs(h) % c.length] }
 function fmtTime(s) { if (!s) return ''; const d = new Date(s), n = new Date(), diff = n - d; if (diff < 6e4) return '刚刚'; if (diff < 36e5) return Math.floor(diff/6e4)+'分钟前'; if (diff < 864e5) return Math.floor(diff/36e5)+'小时前'; return d.toLocaleString('zh-CN') }
-function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '...' : s }
 function previewMD(text) {
   if (!text) return ''
   const html = marked.parse(text)
-  // Strip all HTML tags for plain text preview
   return html.replace(/<[^>]*>/g, '').slice(0, 200)
 }
 
