@@ -2,7 +2,6 @@ package controllers
 
 import (
 	"net/http"
-	"strings"
 
 	"community/backend/data"
 	"community/backend/middlewares"
@@ -10,12 +9,11 @@ import (
 	"community/backend/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 )
 
 // ─── 发表评论 ───
 func CreateComment(c *gin.Context) {
-	postID := strToUint(c.Param("id"))
+	postID := middlewares.StrToUint(c.Param("id"))
 
 	var req struct {
 		Content string `json:"content" binding:"required,min=1"`
@@ -36,9 +34,9 @@ func CreateComment(c *gin.Context) {
 	models.Success(c, "评论成功 💬", gin.H{"comment": comment})
 }
 
-// ─── 评论列表（公开，但解析 token 确定权限）───
+// ─── 评论列表（公开，可选认证以计算 can_edit / can_delete）───
 func GetComments(c *gin.Context) {
-	postID := strToUint(c.Param("id"))
+	postID := middlewares.StrToUint(c.Param("id"))
 
 	comments, err := data.ListCommentsByPost(postID)
 	if err != nil {
@@ -46,24 +44,14 @@ func GetComments(c *gin.Context) {
 		return
 	}
 
-	// 尝试从 token 获取当前用户
+	// 尝试获取当前用户信息（可选）
 	currentUserID := uint(0)
 	roleNames := []string{}
-	authHeader := c.GetHeader("Authorization")
-	if authHeader != "" {
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) == 2 && parts[0] == "Bearer" {
-			claims := &middlewares.Claims{}
-			token, err := jwt.ParseWithClaims(parts[1], claims, func(t *jwt.Token) (interface{}, error) {
-				return middlewares.JWTKey(), nil
-			})
-			if err == nil && token.Valid {
-				currentUserID = claims.UserID
-				if u, err := data.FindUserByIDWithRoles(currentUserID); err == nil {
-					roleNames = u.RoleNames()
-				}
-			}
-		}
+	if userID, exists := c.Get("user_id"); exists {
+		currentUserID = userID.(uint)
+	}
+	if roles, exists := c.Get("roles"); exists {
+		roleNames = roles.([]string)
 	}
 
 	items := service.BuildCommentPermissions(comments, currentUserID, roleNames)
@@ -72,11 +60,8 @@ func GetComments(c *gin.Context) {
 }
 
 // ─── 编辑评论 ───
+// 权限由 RequireResource 中间件保证，controller 零权限代码
 func UpdateComment(c *gin.Context) {
-	id := strToUint(c.Param("id"))
-	userID := c.GetUint("user_id")
-	roles := c.GetStringSlice("roles")
-
 	var req struct {
 		Content string `json:"content" binding:"required,min=1"`
 	}
@@ -85,23 +70,23 @@ func UpdateComment(c *gin.Context) {
 		return
 	}
 
-	comment, err := service.UpdateComment(id, userID, req.Content, roles)
+	comment := c.MustGet("resource").(*models.Comment) // 中间件注入
+
+	result, err := service.UpdateComment(comment, req.Content)
 	if err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)
 		return
 	}
 
-	models.Success(c, "已更新", gin.H{"comment": comment})
+	models.Success(c, "已更新", gin.H{"comment": result})
 }
 
 // ─── 删除评论 ───
 func DeleteComment(c *gin.Context) {
-	id := strToUint(c.Param("id"))
-	userID := c.GetUint("user_id")
-	roles := c.GetStringSlice("roles")
+	comment := c.MustGet("resource").(*models.Comment) // 中间件注入
 
-	if err := service.DeleteComment(id, userID, roles); err != nil {
+	if err := service.DeleteComment(comment); err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)
 		return

@@ -27,32 +27,46 @@ func Setup(r *gin.Engine) {
 
 	api := r.Group("/api")
 	{
+		// 公开接口
 		api.POST("/login", middlewares.RateLimit(5, time.Minute), controllers.Login)
 		api.GET("/users", controllers.SearchUsers)
 		api.GET("/users/:id", controllers.GetUserProfile)
 		api.GET("/posts", controllers.GetPosts)
 		api.GET("/posts/:id", controllers.GetPost)
-		api.GET("/posts/:id/comments", controllers.GetComments)
+		api.GET("/posts/:id/comments", middlewares.OptionalAuth(), controllers.GetComments)
 		api.GET("/announcement", controllers.GetAnnouncement)
 		api.GET("/categories", controllers.GetCategories)
 
 		auth := api.Group("")
 		auth.Use(middlewares.AuthRequired())
 		{
-			// 上传
+			// ── 上传 ──
 			auth.POST("/upload/image", controllers.UploadImage)
 			auth.POST("/upload/file", controllers.UploadFile)
 
-			// 发帖 / 评论（所有登录用户）
-			auth.POST("/posts", controllers.CreatePost)
-			auth.PUT("/posts/:id", controllers.UpdatePost)
-			auth.DELETE("/posts/:id", controllers.DeletePost)
+			// ── 帖子（创建 = 纯角色权限，编辑/删除 = 资源关系权限）──
+			auth.POST("/posts", middlewares.RequirePerm("post.create"), controllers.CreatePost)
+			auth.PUT("/posts/:id",
+				middlewares.RequireResource(middlewares.PostLoader, "post.manage_any", "post.manage_category"),
+				controllers.UpdatePost,
+			)
+			auth.DELETE("/posts/:id",
+				middlewares.RequireResource(middlewares.PostLoader, "post.manage_any", "post.manage_category"),
+				controllers.DeletePost,
+			)
 
-			auth.POST("/posts/:id/comments", controllers.CreateComment)
-			auth.PUT("/comments/:id", controllers.UpdateComment)
-			auth.DELETE("/comments/:id", controllers.DeleteComment)
+			// ── 评论（创建 = 纯角色权限，编辑/删除 = 资源关系权限）──
+			auth.POST("/posts/:id/comments", middlewares.RequirePerm("comment.create"), controllers.CreateComment)
+			auth.PUT("/comments/:id",
+				middlewares.RequireResource(middlewares.CommentLoader, "comment.manage_any", "comment.manage_category"),
+				controllers.UpdateComment,
+			)
+			auth.DELETE("/comments/:id",
+				middlewares.RequireResource(middlewares.CommentLoader, "comment.manage_any", "comment.manage_category"),
+				controllers.DeleteComment,
+			)
 
-			// 私信
+			// ── 私信 ──
 			auth.POST("/threads", controllers.CreateThread)
 			auth.GET("/threads", controllers.GetThreads)
 			auth.DELETE("/threads/:id", controllers.DeleteThread)
@@ -68,18 +82,18 @@ func Setup(r *gin.Engine) {
 			// SSE 流（TokenFromQuery → AuthRequired 顺序不可逆）
 			api.GET("/messages/stream", middlewares.TokenFromQuery(), middlewares.AuthRequired(), controllers.MessageStream)
 
-			// 关注
+			// ── 关注 ──
 			auth.POST("/follow", controllers.FollowUser)
 			auth.DELETE("/follow/:user_id", controllers.UnfollowUser)
 			auth.GET("/following", controllers.GetMyFollowing)
 			auth.GET("/followers", controllers.GetMyFollowers)
 
-			// 管理员面板
+			// ── 管理员面板 ──
 			admin := auth.Group("/admin")
 			{
-				// 管理员级别（admin + super_admin）
+				// 封禁 / 公告 / 用户列表（admin / super_admin 均可）
 				adminLevel := admin.Group("")
-				adminLevel.Use(middlewares.RequireAdmin())
+				adminLevel.Use(middlewares.RequirePerm("ban.any"))
 				{
 					adminLevel.PUT("/users/:id/ban", controllers.BanUser)
 					adminLevel.PUT("/users/:id/unban", controllers.UnbanUser)
@@ -88,16 +102,10 @@ func Setup(r *gin.Engine) {
 					adminLevel.DELETE("/announcement", controllers.DeleteAnnouncement)
 				}
 
-				// 仅 super_admin：创建用户
+				// 仅 super_admin：创建/删除用户、角色管理、分类管理
 				admin.POST("/users", middlewares.RequirePerm("user.create"), controllers.AdminCreateUser)
-
-				// 仅 super_admin：删除用户
 				admin.DELETE("/users/:id", middlewares.RequirePerm("user.delete"), controllers.AdminDeleteUser)
-
-				// 仅 super_admin：角色管理
 				admin.PUT("/users/:id/roles", middlewares.RequirePerm("role.assign"), controllers.AdminAssignRoles)
-
-				// 仅 super_admin：分类管理
 				admin.POST("/categories", middlewares.RequirePerm("category.manage"), controllers.CreateCategory)
 				admin.DELETE("/categories/:id", middlewares.RequirePerm("category.manage"), controllers.DeleteCategory)
 			}

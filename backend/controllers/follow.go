@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"community/backend/data"
+	"community/backend/middlewares"
 	"community/backend/models"
 	"community/backend/service"
 
@@ -32,7 +33,7 @@ func FollowUser(c *gin.Context) {
 // ─── 取消关注 ───
 func UnfollowUser(c *gin.Context) {
 	myID := c.GetUint("user_id")
-	targetID := strToUint(c.Param("user_id"))
+	targetID := middlewares.StrToUint(c.Param("user_id"))
 
 	if err := service.UnfollowUser(myID, targetID); err != nil {
 		code, msg := service.ToHTTP(err)

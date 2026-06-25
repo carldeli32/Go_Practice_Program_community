@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"community/backend/data"
+	"community/backend/middlewares"
 	"community/backend/models"
 	"community/backend/service"
 	"community/backend/sse"
@@ -53,7 +54,7 @@ func GetThreads(c *gin.Context) {
 func DeleteThread(c *gin.Context) {
 	myID := c.GetUint("user_id")
 
-	if err := service.DeleteThread(strToUint(c.Param("id")), myID); err != nil {
+	if err := service.DeleteThread(middlewares.StrToUint(c.Param("id")), myID); err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)
 		return
@@ -140,7 +141,7 @@ func MarkMessagesRead(c *gin.Context) {
 
 // ─── 撤回消息 ───
 func RecallMessage(c *gin.Context) {
-	msgID := strToUint(c.Param("id"))
+	msgID := middlewares.StrToUint(c.Param("id"))
 	if err := service.RecallMessage(msgID, c.GetUint("user_id")); err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)

@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"community/backend/data"
+	"community/backend/middlewares"
 	"community/backend/models"
 	"community/backend/service"
 
@@ -74,7 +75,7 @@ func GetPosts(c *gin.Context) {
 // ─── 帖子详情 ───
 func GetPost(c *gin.Context) {
 	pid := c.Param("id")
-	post, err := data.FindPostByID(strToUint(pid))
+	post, err := data.FindPostByID(middlewares.StrToUint(pid))
 	if err != nil {
 		models.Error(c, http.StatusNotFound, "帖子不存在")
 		return
@@ -83,11 +84,8 @@ func GetPost(c *gin.Context) {
 }
 
 // ─── 更新帖子 ───
+// 权限由 RequireResource 中间件保证，controller 零权限代码
 func UpdatePost(c *gin.Context) {
-	id := c.Param("id")
-	userID := c.GetUint("user_id")
-	roles := c.GetStringSlice("roles")
-
 	var req struct {
 		Title      string `json:"title"`
 		Content    string `json:"content"`
@@ -98,37 +96,32 @@ func UpdatePost(c *gin.Context) {
 		return
 	}
 
+	post := c.MustGet("resource").(*models.Post) // 中间件注入，免重查
+
 	categoryID := uint(0)
 	if req.CategoryID != nil {
 		categoryID = *req.CategoryID
 	}
 
-	post, err := service.UpdatePost(strToUint(id), userID, req.Title, req.Content, categoryID, roles)
+	result, err := service.UpdatePost(post, req.Title, req.Content, categoryID)
 	if err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)
 		return
 	}
 
-	models.Success(c, "更新成功", gin.H{"post": post})
+	models.Success(c, "更新成功", gin.H{"post": result})
 }
 
 // ─── 删除帖子 ───
 func DeletePost(c *gin.Context) {
-	id := c.Param("id")
-	userID := c.GetUint("user_id")
-	roles := c.GetStringSlice("roles")
+	post := c.MustGet("resource").(*models.Post) // 中间件注入
 
-	if err := service.DeletePost(strToUint(id), userID, roles); err != nil {
+	if err := service.DeletePost(post); err != nil {
 		code, msg := service.ToHTTP(err)
 		models.Error(c, code, msg)
 		return
 	}
 
 	models.Success(c, "删除成功", nil)
-}
-
-func strToUint(s string) uint {
-	v, _ := strconv.Atoi(s)
-	return uint(v)
 }

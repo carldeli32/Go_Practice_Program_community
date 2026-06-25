@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"community/backend/data"
+	"community/backend/middlewares"
 	"community/backend/models"
 	"community/backend/service"
 
@@ -43,7 +44,7 @@ func CreateCategory(c *gin.Context) {
 
 // DeleteCategory 删除分类
 func DeleteCategory(c *gin.Context) {
-	id := strToUint(c.Param("id"))
+	id := middlewares.StrToUint(c.Param("id"))
 
 	if err := service.DeleteCategory(id); err != nil {
 		code, msg := service.ToHTTP(err)

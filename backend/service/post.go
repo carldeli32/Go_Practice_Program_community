@@ -46,16 +46,8 @@ func CreatePost(userID uint, title, content string, categoryID uint, status stri
 
 // ─── 编辑 ───
 
-func UpdatePost(postID, userID uint, title, content string, categoryID uint, roles []string) (*models.Post, error) {
-	post, err := data.FindPostByIDRaw(postID)
-	if err != nil {
-		return nil, ErrNotFound("帖子")
-	}
-
-	if !CanManagePost(userID, roles, post) {
-		return nil, ErrForbidden
-	}
-
+// UpdatePost 更新帖子内容（权限由中间件保证）
+func UpdatePost(post *models.Post, title, content string, categoryID uint) (*models.Post, error) {
 	updates := map[string]interface{}{}
 	if title != "" {
 		updates["title"] = title
@@ -70,61 +62,36 @@ func UpdatePost(postID, userID uint, title, content string, categoryID uint, rol
 		return nil, ErrNoUpdateContent
 	}
 
-	if err := data.UpdatePost(postID, updates); err != nil {
+	if err := data.UpdatePost(post.ID, updates); err != nil {
 		return nil, ErrDBOpFail
 	}
-	return data.FindPostByID(postID)
+	return data.FindPostByID(post.ID)
 }
 
 // ─── 删除 ───
 
-// DeletePost 查帖子 → 权限检查 → 收集上传文件 → 删评论 → 删帖子 → 清理文件
-func DeletePost(postID, userID uint, roles []string) error {
-	post, err := data.FindPostByIDRaw(postID)
-	if err != nil {
-		return ErrNotFound("帖子")
-	}
-
-	if !CanManagePost(userID, roles, post) {
-		return ErrForbidden
-	}
-
+// DeletePost 删评论 → 删帖子 → 清理上传文件（权限由中间件保证）
+func DeletePost(post *models.Post) error {
 	// 收集需要清理的上传文件
 	var urlsToDelete []string
 	urlsToDelete = append(urlsToDelete, extractUploadURLs(post.Content)...)
 
-	comments, _ := data.ListCommentsByPost(postID)
+	comments, _ := data.ListCommentsByPost(post.ID)
 	for _, c := range comments {
 		urlsToDelete = append(urlsToDelete, extractUploadURLs(c.Content)...)
 	}
 
 	// 删数据库
-	_ = data.DeleteCommentsByPost(postID)
-	_ = data.DeletePost(postID)
+	_ = data.DeleteCommentsByPost(post.ID)
+	_ = data.DeletePost(post.ID)
 
 	// 清磁盘
 	for _, url := range urlsToDelete {
 		storage.Store.DeleteImage(url)
 	}
-	storage.Store.DeletePostDir(postID)
+	storage.Store.DeletePostDir(post.ID)
 
 	return nil
-}
-
-// ─── 权限判断 ───
-
-func CanManagePost(userID uint, roles []string, post *models.Post) bool {
-	if post.UserID == userID {
-		return true
-	}
-	if models.HasPerm(roles, "post.manage_any") {
-		return true
-	}
-	if models.HasPerm(roles, "post.manage_category") {
-		ok, _ := data.ExistsModeratorCategory(userID, post.CategoryID)
-		return ok
-	}
-	return false
 }
 
 // ─── 禁言检查 ───
