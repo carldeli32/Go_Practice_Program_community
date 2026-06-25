@@ -44,27 +44,23 @@ func Setup(r *gin.Engine) {
 			auth.POST("/upload/image", controllers.UploadImage)
 			auth.POST("/upload/file", controllers.UploadFile)
 
-			// ── 帖子（创建 = 纯角色权限，编辑/删除 = 资源关系权限）──
+			// ── 帖子：创建 = 角色权限，编辑/删除 = 资源权限（group 只挂一次）──
 			auth.POST("/posts", middlewares.RequirePerm("post.create"), controllers.CreatePost)
-			auth.PUT("/posts/:id",
-				middlewares.RequireResource(middlewares.PostLoader, "post.manage_any", "post.manage_category"),
-				controllers.UpdatePost,
-			)
-			auth.DELETE("/posts/:id",
-				middlewares.RequireResource(middlewares.PostLoader, "post.manage_any", "post.manage_category"),
-				controllers.DeletePost,
-			)
+			postRes := auth.Group("/posts/:id")
+			postRes.Use(middlewares.RequireResource(middlewares.PostLoader, "post.manage_any", "post.manage_category"))
+			{
+				postRes.PUT("", controllers.UpdatePost)
+				postRes.DELETE("", controllers.DeletePost)
+			}
 
-			// ── 评论（创建 = 纯角色权限，编辑/删除 = 资源关系权限）──
+			// ── 评论：创建 = 角色权限，编辑/删除 = 资源权限（group 只挂一次）──
 			auth.POST("/posts/:id/comments", middlewares.RequirePerm("comment.create"), controllers.CreateComment)
-			auth.PUT("/comments/:id",
-				middlewares.RequireResource(middlewares.CommentLoader, "comment.manage_any", "comment.manage_category"),
-				controllers.UpdateComment,
-			)
-			auth.DELETE("/comments/:id",
-				middlewares.RequireResource(middlewares.CommentLoader, "comment.manage_any", "comment.manage_category"),
-				controllers.DeleteComment,
-			)
+			commentRes := auth.Group("/comments/:id")
+			commentRes.Use(middlewares.RequireResource(middlewares.CommentLoader, "comment.manage_any", "comment.manage_category"))
+			{
+				commentRes.PUT("", controllers.UpdateComment)
+				commentRes.DELETE("", controllers.DeleteComment)
+			}
 
 			// ── 私信 ──
 			auth.POST("/threads", controllers.CreateThread)
@@ -91,7 +87,7 @@ func Setup(r *gin.Engine) {
 			// ── 管理员面板 ──
 			admin := auth.Group("/admin")
 			{
-				// 封禁 / 公告 / 用户列表（admin / super_admin 均可）
+				// admin / super_admin 均可
 				adminLevel := admin.Group("")
 				adminLevel.Use(middlewares.RequirePerm("ban.any"))
 				{
@@ -102,7 +98,7 @@ func Setup(r *gin.Engine) {
 					adminLevel.DELETE("/announcement", controllers.DeleteAnnouncement)
 				}
 
-				// 仅 super_admin：创建/删除用户、角色管理、分类管理
+				// 仅 super_admin
 				admin.POST("/users", middlewares.RequirePerm("user.create"), controllers.AdminCreateUser)
 				admin.DELETE("/users/:id", middlewares.RequirePerm("user.delete"), controllers.AdminDeleteUser)
 				admin.PUT("/users/:id/roles", middlewares.RequirePerm("role.assign"), controllers.AdminAssignRoles)
