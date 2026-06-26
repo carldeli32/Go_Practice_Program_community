@@ -64,8 +64,13 @@ func DeleteComment(comment *models.Comment) error {
 // 使用统一的 CheckRelation 引擎，与中间件保持逻辑一致
 func BuildCommentPermissions(comments []models.Comment, currentUserID uint, roles []string) []CommentWithPerm {
 	items := make([]CommentWithPerm, len(comments))
+	catCache := make(map[uint]uint) // postID → categoryID，避免 N+1 查询
 	for i, c := range comments {
-		catID := postCategoryID(c.PostID)
+		catID, ok := catCache[c.PostID]
+		if !ok {
+			catID = postCategoryID(c.PostID)
+			catCache[c.PostID] = catID
+		}
 		items[i] = CommentWithPerm{
 			Comment:   c,
 			CanEdit:   middlewares.CheckRelation(currentUserID, c.UserID, catID, roles, "comment.manage_any", "comment.manage_category"),

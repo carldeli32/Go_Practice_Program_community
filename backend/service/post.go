@@ -4,8 +4,10 @@ import (
 	"community/backend/data"
 	"community/backend/models"
 	"community/backend/storage"
+	"errors"
 	"regexp"
-	"time"
+
+	"gorm.io/gorm"
 )
 
 // mdImageRegex 匹配 Markdown 图片语法 ![](url)
@@ -99,18 +101,16 @@ func DeletePost(post *models.Post) error {
 func checkMuted(userID, categoryID uint) *AppError {
 	mute, err := data.FindActiveMute(userID, categoryID)
 	if err != nil {
-		return nil
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil // 没有禁言记录，正常放行
+		}
+		return ErrDBOpFail // 真正的 DB 错误
 	}
 
 	until := mute.MutedUntil.Format("2006-01-02 15:04")
-	_ = now()
 
 	if mute.CategoryID == 0 {
 		return ErrMuted(until)
 	}
 	return ErrMutedCategory(until)
-}
-
-func now() string {
-	return time.Now().Format("2006-01-02 15:04")
 }
